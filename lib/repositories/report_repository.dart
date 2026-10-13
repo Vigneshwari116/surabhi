@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/location_database.dart';
-import 'package:surabhi/repositories/ledger_repository.dart';
+import 'package:surabhi/repositories/ledger_repository.dart' hide LocalLedgerEntry;
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 

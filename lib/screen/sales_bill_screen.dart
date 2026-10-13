@@ -185,6 +185,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
       unawaited(_loadMasterParticulars());
     }
+    if (widget.isSectionActive && !oldWidget.isSectionActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _restoreSavedFocus();
+      });
+    }
   }
 
   @override
@@ -222,16 +227,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         if (mounted) {
           _restoreSavedFocus();
         }
-      });
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant SalesBillScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isSectionActive && !oldWidget.isSectionActive) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _restoreSavedFocus();
       });
     }
   }
