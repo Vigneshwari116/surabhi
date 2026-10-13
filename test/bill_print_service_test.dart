@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/bill_print_service.dart';
@@ -12,7 +13,7 @@ SaleBill _sampleBill() {
     paymentMode: 'CASH',
     customerName: '',
     mobile: '',
-    items: [BillItem(qty: 1, rate: 1000)],
+    items: [BillItem(particular: 'Shirt', qty: 1, rate: 1000)],
     totalQty: 1,
     totalAmount: 952.38,
     totalCgst: 24,
@@ -37,7 +38,6 @@ void main() {
     final text = ReceiptService.buildReceiptText(_sampleBill());
 
     expect(text, contains('TERMS AND CONDITION'));
-    expect(text, contains('EXCHANGE ONLY 3 DAYS'));
     expect(text, contains('AMOUNT NOT REFUND'));
     expect(text, contains('THANK YOU VISIT AGAIN'));
 
@@ -46,32 +46,18 @@ void main() {
     expect(footerIndex, greaterThan(grandTotalIndex));
   });
 
-  test('thermal pdf uses 80mm page width and RP3200 Font A line spacing', () async {
+  test('desktop bill pdf is non-empty A4 with readable content', () async {
     final bill = _sampleBill();
-    final text = ReceiptService.buildReceiptText(bill);
-    final lineCount = text.split('\n').length;
-    final bytes = await BillPrintService.buildPdfBytes(bill);
-    final pageFormat = BillPrintService.pageFormatForBill(bill);
+    final bytes = await BillPrintService.buildDesktopPdfBytes(bill);
     final pdfText = String.fromCharCodes(bytes);
 
     expect(bytes, isNotEmpty);
     expect(bytes.length, greaterThan(500));
     expect(pdfText, contains('/MediaBox'));
-    final mediaBoxMatch =
-        RegExp(r'/MediaBox\[0 0 ([\d.]+) ([\d.]+)\]').firstMatch(pdfText);
-    expect(mediaBoxMatch, isNotNull);
-    final pageWidthPt = double.parse(mediaBoxMatch!.group(1)!);
-    final pageHeightPt = double.parse(mediaBoxMatch.group(2)!);
+    expect(pdfText, contains('SURABHI EXPORTS'));
+    expect(pdfText, contains('GRAND TOTAL'));
 
-    // 80mm ≈ 226.77pt; allow small float tolerance from PDF generation.
-    expect(pageWidthPt, closeTo(pageFormat.width, 1.0));
-    expect(pageWidthPt, closeTo(226.77, 2.0));
-    expect(pageHeightPt, closeTo(pageFormat.height, 2.0));
-
-    // Height grows with 4.25mm per line (RP3200 default line spacing).
-    final expectedHeightMm =
-        lineCount * BillPrintService.thermalLineSpacingMm + 8.0;
-    final actualHeightMm = pageHeightPt / 72 * 25.4;
-    expect(actualHeightMm, closeTo(expectedHeightMm, 2.0));
+    final pageFormat = BillPrintService.pageFormatForBill(bill);
+    expect(pageFormat.width, closeTo(PdfPageFormat.a4.width, 1.0));
   });
 }

@@ -1,5 +1,6 @@
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -62,7 +63,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   static const Color billNoColor = Color(0xFF7FE8E8);
   static const double _entryBoxWidth = 92;
-  static const double _entryBoxHeight = 38;
+  static const double _entryBoxHeight = 44;
   static const double _entryLabelSize = 18.0;
   static const double _desktopBreakpoint = 900;
   static const double _sidebarBreakpoint = 700;
@@ -794,14 +795,27 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
       final int savedBillNo = _billNo;
 
+      String? pdfPath;
+      try {
+        pdfPath = await BillPrintService.saveReceiptPdfToDesktop(bill);
+      } catch (e) {
+        pdfPath = null;
+      }
+
       final defaultPrinter = await PrinterSettingsService.getDefaultPrinter(
         PrinterType.thermal,
       );
 
       if (defaultPrinter == null || defaultPrinter.isEmpty) {
-        _showMessage(
-          'No printer selected. Please choose one in Printer Settings.',
-        );
+        if (pdfPath != null) {
+          _showMessage(
+            'Bill $savedBillNo saved. PDF on Desktop: ${pdfPath.split(Platform.pathSeparator).last}',
+          );
+        } else {
+          _showMessage(
+            'No printer selected. Choose one in PRINTER, or check Desktop for PDF.',
+          );
+        }
       } else {
         try {
           await BillPrintService.printReceipt(
@@ -809,9 +823,21 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             printerName: defaultPrinter,
             type: PrinterType.thermal,
           );
-          _showMessage('Bill $savedBillNo saved and printed');
+          if (pdfPath != null) {
+            _showMessage(
+              'Bill $savedBillNo saved, printed, and PDF saved to Desktop.',
+            );
+          } else {
+            _showMessage('Bill $savedBillNo saved and printed');
+          }
         } catch (e) {
-          _showMessage('Bill $savedBillNo saved (print failed: $e)');
+          if (pdfPath != null) {
+            _showMessage(
+              'Bill $savedBillNo saved. PDF on Desktop (print failed: $e)',
+            );
+          } else {
+            _showMessage('Bill $savedBillNo saved (print failed: $e)');
+          }
         }
       }
 
@@ -1817,7 +1843,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       onChanged: onChanged,
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
       decoration: _entryDecoration(),
-      style: const TextStyle(fontSize: 14, height: 1),
+      style: const TextStyle(fontSize: AppTextSizes.fieldText, height: 1),
     );
 
     if (blockTabTraversal) {
@@ -2206,7 +2232,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, height: 1),
+            style: const TextStyle(fontSize: AppTextSizes.fieldText, height: 1),
             decoration: _entryDecoration(),
           ),
         ),
