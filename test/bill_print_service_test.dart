@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:surabhi/models/sale_bill.dart';
@@ -46,7 +47,17 @@ void main() {
     expect(footerIndex, greaterThan(grandTotalIndex));
   });
 
-  test('desktop bill pdf is non-empty A4 with readable content', () async {
+  test('bill pdf matches bar-and-rest 78mm thermal layout', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', (message) async {
+      final key = const StringCodec().decodeMessage(message);
+      if (key == 'assets/fonts/consolas.ttf') {
+        return Uint8List.fromList([0, 1, 2, 3]);
+      }
+      return null;
+    });
+
     final bill = _sampleBill();
     final bytes = await BillPrintService.buildDesktopPdfBytes(bill);
     final pdfText = String.fromCharCodes(bytes);
@@ -58,6 +69,9 @@ void main() {
     expect(pdfText, contains('GRAND TOTAL'));
 
     final pageFormat = BillPrintService.pageFormatForBill(bill);
-    expect(pageFormat.width, closeTo(PdfPageFormat.a4.width, 1.0));
+    expect(pageFormat.width, closeTo(78 * PdfPageFormat.mm, 1.0));
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', null);
   });
 }

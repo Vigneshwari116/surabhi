@@ -4,25 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/services/esc_pos_receipt_service.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/receipt_service.dart';
-import 'package:surabhi/services/thermal_raw_printer.dart';
+import 'package:surabhi/services/thermal_bill_pdf_service.dart';
 
 class BillPrintService {
-  /// TVS RP3200: 80mm roll; 70mm content area keeps left/right data visible.
-  static const double thermalPageWidthMm = 80.0;
-  static const double thermalPrintableWidthMm = 70.0;
-  static const double _thermalMarginMm =
-      (thermalPageWidthMm - thermalPrintableWidthMm) / 2;
-
-  /// RP3200 Font A (12×24 dots): 48 columns, 1.50×3.00mm per character.
-  static const double thermalFontSizePt = 8.0;
-  static const double thermalCharWidthMm = 1.50;
-  static const double thermalLineSpacingMm = 4.25;
+  /// Matches bar-and-rest-correct- thermal roll width.
+  static const double thermalPageWidthMm = ThermalBillPdfService.rollWidthMm;
 
   static Future<String> saveReceiptToDesktop(SaleBill bill) async {
     final text = ReceiptService.buildReceiptText(bill);
@@ -34,9 +24,9 @@ class BillPrintService {
     return file.path;
   }
 
-  /// Saves a normal A4 PDF that opens correctly in Desktop viewers.
+  /// Thermal-roll PDF (Consolas, 78mm) — same style as bar-and-rest-correct-.
   static Future<String> saveReceiptPdfToDesktop(SaleBill bill) async {
-    final bytes = await buildDesktopPdfBytes(bill);
+    final bytes = await buildThermalPdfBytes(bill);
     final saveDir = await _receiptSaveDirectory();
     final datePart = DateFormat('dd-MM-yyyy').format(bill.billDate);
     final fileName = 'Bill_${bill.billNo}_$datePart.pdf';
@@ -72,23 +62,12 @@ class BillPrintService {
       throw Exception('Printer "$printerName" not found');
     }
 
-    if (type == PrinterType.thermal &&
-        !kIsWeb &&
-        Platform.isWindows &&
-        _usesRawEscPos(printerName)) {
-      final escPosBytes = EscPosReceiptService.buildReceiptBytes(bill);
-      return printRawEscPos(
-        printerName: printerName,
-        data: escPosBytes,
-      );
-    }
-
-    final pdfBytes = await buildDesktopPdfBytes(bill);
+    final thermal = await ThermalBillPdfService.buildPdfWithFormat(bill);
     final printed = await Printing.directPrintPdf(
       printer: printer,
-      onLayout: (_) async => pdfBytes,
+      onLayout: (_) async => thermal.bytes,
       name: 'Bill_${bill.billNo}',
-      format: PdfPageFormat.a4,
+      format: thermal.format,
       dynamicLayout: false,
       usePrinterSettings: false,
     );
@@ -96,39 +75,15 @@ class BillPrintService {
     return printed;
   }
 
-  /// PDF for Desktop / Print to PDF — avoids blank pages from thermal FittedBox layout.
   @visibleForTesting
-  static Future<Uint8List> buildDesktopPdfBytes(SaleBill bill) async {
-    final text = _normalizedReceiptText(ReceiptService.buildReceiptText(bill));
-    final lines = text.split('\n');
-    final doc = pw.Document();
-    const fontSize = 11.0;
-    final style = pw.TextStyle(
-      font: pw.Font.courier(),
-      fontSize: fontSize,
-      color: PdfColors.black,
-    );
+  static Future<Uint8List> buildThermalPdfBytes(SaleBill bill) {
+    return ThermalBillPdfService.buildPdfBytes(bill);
+  }
 
-    doc.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 36),
-        build: (context) => [
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              for (final line in lines)
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 2),
-                  child: _pdfReceiptLine(line, style),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    return doc.save();
+  /// Kept for tests — same thermal PDF as physical print.
+  @visibleForTesting
+  static Future<Uint8List> buildDesktopPdfBytes(SaleBill bill) {
+    return buildThermalPdfBytes(bill);
   }
 
   @visibleForTesting
@@ -136,7 +91,7 @@ class BillPrintService {
     SaleBill bill, {
     PrinterType type = PrinterType.thermal,
   }) {
-    return buildDesktopPdfBytes(bill);
+    return buildThermalPdfBytes(bill);
   }
 
   @visibleForTesting
@@ -144,54 +99,14 @@ class BillPrintService {
     SaleBill bill, {
     PrinterType type = PrinterType.thermal,
   }) {
-    return PdfPageFormat.a4;
-  }
-
-  static bool _usesRawEscPos(String printerName) {
-    return !_isVirtualDocumentPrinter(printerName);
-  }
-
-  static bool _isVirtualDocumentPrinter(String printerName) {
-    final lower = printerName.toLowerCase();
-    return lower.contains('pdf') ||
-        lower.contains('xps') ||
-        lower.contains('onenote') ||
-        lower.contains('fax');
-  }
-
-  static String _displayLine(String line) {
-    final trimmed = line.trim();
-    return trimmed.isEmpty ? ' ' : trimmed;
-  }
-
-  /// Preserves thermal receipt alignment (centered shop name, thank-you line).
-  static pw.Widget _pdfReceiptLine(String line, pw.TextStyle style) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty) {
-      return pw.SizedBox(height: style.fontSize);
-    }
-    if (_isCenteredReceiptLine(line, trimmed)) {
-      return pw.Center(
-        child: pw.Text(trimmed, style: style, textAlign: pw.TextAlign.center),
-      );
-    }
-    return pw.Align(
-      alignment: pw.Alignment.centerLeft,
-      child: pw.Text(_displayLine(line), style: style),
+    return PdfPageFormat(
+      ThermalBillPdfService.rollWidthMm * PdfPageFormat.mm,
+      200 * PdfPageFormat.mm,
+      marginLeft: 1.5 * PdfPageFormat.mm,
+      marginRight: 6.0 * PdfPageFormat.mm,
+      marginTop: 2.5 * PdfPageFormat.mm,
+      marginBottom: 5.0 * PdfPageFormat.mm,
     );
-  }
-
-  static bool _isCenteredReceiptLine(String raw, String trimmed) {
-    return ReceiptService.isThermalCenteredLine(raw);
-  }
-
-  static String _normalizedReceiptText(String text) {
-    return text
-        .replaceAll('\r\n', '\n')
-        .split('\n')
-        .map((line) => line.replaceAll('\r', ''))
-        .join('\n')
-        .trimRight();
   }
 
   static Future<String> _receiptSaveDirectory() async {
