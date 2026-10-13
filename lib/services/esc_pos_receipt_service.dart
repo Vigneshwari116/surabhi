@@ -51,19 +51,28 @@ class EscPosReceiptService {
     ];
 
     final lines = text.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (i == 0 && _isBusinessTitleLine(line)) {
+    for (final line in lines) {
+      if (_isBusinessTitleLine(line)) {
         bytes
           ..addAll(_alignCenter)
           ..addAll(_doubleSize)
           ..addAll(_boldOn);
-        bytes.addAll(_encodeLine(_trimmedTitle(line)));
+        bytes.addAll(_encodeLine(line.trim(), padToWidth: false));
         bytes
           ..add(0x0A)
           ..addAll(_alignLeft)
           ..addAll(_normalSize)
           ..addAll(_boldOn);
+        continue;
+      }
+      if (ReceiptService.isThermalCenteredLine(line)) {
+        bytes
+          ..addAll(_alignCenter)
+          ..addAll(_boldOn);
+        bytes.addAll(_encodeLine(line.trim(), padToWidth: false));
+        bytes
+          ..add(0x0A)
+          ..addAll(_alignLeft);
         continue;
       }
       bytes.addAll(_encodeLine(line));
@@ -77,11 +86,12 @@ class EscPosReceiptService {
     return bytes;
   }
 
-  static List<int> _encodeLine(String line) {
+  static List<int> _encodeLine(String line, {bool padToWidth = true}) {
     final normalized = line.replaceAll('\r', '');
-    final padded = normalized.length > columnsPerLine
+    final capped = normalized.length > columnsPerLine
         ? normalized.substring(0, columnsPerLine)
-        : normalized.padRight(columnsPerLine);
+        : normalized;
+    final padded = padToWidth ? capped.padRight(columnsPerLine) : capped;
 
     final encoded = <int>[];
     for (final unit in padded.codeUnits) {
@@ -97,10 +107,6 @@ class EscPosReceiptService {
   static bool _isBusinessTitleLine(String line) {
     final trimmed = line.trim();
     return trimmed.contains(ReceiptService.businessName);
-  }
-
-  static String _trimmedTitle(String line) {
-    return line.trim();
   }
 
   static String _normalizedReceiptText(String text) {
