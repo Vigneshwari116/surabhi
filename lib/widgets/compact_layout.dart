@@ -218,7 +218,7 @@ class CompactAbstractSummary extends StatelessWidget {
             style: const TextStyle(
               fontSize: AppTextSizes.listSubtitle,
               fontWeight: FontWeight.w600,
-              color: AppColors.mutedBlue,
+              color: Colors.black,
               letterSpacing: 0.3,
             ),
           ),
@@ -228,7 +228,7 @@ class CompactAbstractSummary extends StatelessWidget {
             style: const TextStyle(
               fontSize: AppTextSizes.fieldText,
               fontWeight: FontWeight.w700,
-              color: AppColors.navy,
+              color: Colors.black,
               height: 1.1,
             ),
           ),
