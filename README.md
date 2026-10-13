@@ -1,17 +1,24 @@
-# surabhi
+# Surabhi Exports
 
-A new Flutter project.
+Offline sales billing app (same flow as RKS sales) for a **single shop location**.
 
-## Getting Started
+## Login
 
-This project is a starting point for a Flutter application.
+| Role | Username | Password |
+|------|----------|----------|
+| Staff | `surabhi` | `surabhi` |
+| Admin | `admin` | `admin123` |
 
-A few resources to get you started if this is your first Flutter project:
+## Features
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- **Master** menu: add item names (shirt, pant, etc.). They appear in the **particular** dropdown on the sales bill (before rate).
+- **Payment** order: UPI, CASH, CARD (default UPI).
+- Thermal receipt: **SNO**, **PARTICULAR**, **RATE**, **QTY**, **AMOUNT** with aligned columns; shop name prints larger on ESC/POS printers.
+- Single local SQLite database (`main_sales.db`) — no sync required (sync menu hidden).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Run
+
+```bash
+flutter pub get
+flutter run -d windows
+```

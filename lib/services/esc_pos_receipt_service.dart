@@ -1,0 +1,114 @@
+import 'package:surabhi/models/sale_bill.dart';
+import 'package:surabhi/services/receipt_service.dart';
+
+/// Builds native ESC/POS bytes for TVS RP3200 (Font A, 80mm, 48 columns).
+class EscPosReceiptService {
+  static const int columnsPerLine = 48;
+
+  /// ESC @ — reset printer.
+  static const List<int> _init = [0x1B, 0x40];
+
+  /// ESC M 0 — Font A (12×24 dots, 48 cols on 80mm).
+  static const List<int> _fontA = [0x1B, 0x4D, 0x00];
+
+  /// ESC 2 — default line spacing (1/6 inch ≈ 4.25mm).
+  static const List<int> _defaultLineSpacing = [0x1B, 0x32];
+
+  /// ESC a 0 — left align (receipt text is pre-formatted).
+  static const List<int> _alignLeft = [0x1B, 0x61, 0x00];
+
+  /// ESC ! 0 — normal width/height (clear double-size modes).
+  static const List<int> _normalSize = [0x1B, 0x21, 0x00];
+
+  /// ESC E 1 — bold/emphasized on for darker thermal print.
+  static const List<int> _boldOn = [0x1B, 0x45, 0x01];
+
+  /// ESC ! 0x30 — double width and height.
+  static const List<int> _doubleSize = [0x1B, 0x21, 0x30];
+
+  /// ESC a 1 — center align.
+  static const List<int> _alignCenter = [0x1B, 0x61, 0x01];
+
+  /// ESC d n — feed n lines before cut.
+  static const List<int> _feedBeforeCut = [0x1B, 0x64, 0x03];
+
+  /// GS V 1 — partial paper cut.
+  static const List<int> _partialCut = [0x1D, 0x56, 0x01];
+
+  static List<int> buildReceiptBytes(SaleBill bill) {
+    final text = _normalizedReceiptText(ReceiptService.buildReceiptText(bill));
+    return buildReceiptBytesFromText(text);
+  }
+
+  static List<int> buildReceiptBytesFromText(String text) {
+    final bytes = <int>[
+      ..._init,
+      ..._fontA,
+      ..._normalSize,
+      ..._boldOn,
+      ..._defaultLineSpacing,
+      ..._alignLeft,
+    ];
+
+    final lines = text.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (i == 0 && _isBusinessTitleLine(line)) {
+        bytes
+          ..addAll(_alignCenter)
+          ..addAll(_doubleSize)
+          ..addAll(_boldOn);
+        bytes.addAll(_encodeLine(_trimmedTitle(line)));
+        bytes
+          ..add(0x0A)
+          ..addAll(_alignLeft)
+          ..addAll(_normalSize)
+          ..addAll(_boldOn);
+        continue;
+      }
+      bytes.addAll(_encodeLine(line));
+      bytes.add(0x0A);
+    }
+
+    bytes
+      ..addAll(_feedBeforeCut)
+      ..addAll(_partialCut);
+
+    return bytes;
+  }
+
+  static List<int> _encodeLine(String line) {
+    final normalized = line.replaceAll('\r', '');
+    final padded = normalized.length > columnsPerLine
+        ? normalized.substring(0, columnsPerLine)
+        : normalized.padRight(columnsPerLine);
+
+    final encoded = <int>[];
+    for (final unit in padded.codeUnits) {
+      if (unit >= 0x20 && unit <= 0x7E) {
+        encoded.add(unit);
+      } else if (unit == 0x09) {
+        encoded.add(0x09);
+      }
+    }
+    return encoded;
+  }
+
+  static bool _isBusinessTitleLine(String line) {
+    final trimmed = line.trim();
+    return trimmed.contains(ReceiptService.businessName);
+  }
+
+  static String _trimmedTitle(String line) {
+    return line.trim();
+  }
+
+  static String _normalizedReceiptText(String text) {
+    return text
+        .replaceAll('\r\n', '\n')
+        .split('\n')
+        .map((line) => line.replaceAll('\r', ''))
+        .join('\n')
+        .trimRight();
+  }
+}
