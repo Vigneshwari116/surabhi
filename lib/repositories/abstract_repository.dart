@@ -29,7 +29,7 @@ class AbstractRepository {
     required DateTime fromDate,
     required DateTime toDate,
   }) async {
-    final code = _locationCodeFromDisplayName(location);
+    final code = locationCodeFromDisplayName(location);
     return getSummaryForLocationCode(
       locationCode: code,
       fromDate: fromDate,
@@ -163,21 +163,6 @@ class AbstractRepository {
       );
     } finally {
       await db.close();
-    }
-  }
-
-  static String _locationCodeFromDisplayName(String location) {
-    switch (location) {
-      case 'Win1':
-        return 'win1';
-      case 'Win2':
-        return 'win2';
-      case 'Win3':
-        return 'win3';
-      case 'Win4':
-        return 'win4';
-      default:
-        return location.toLowerCase();
     }
   }
 

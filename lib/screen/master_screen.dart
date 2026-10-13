@@ -56,12 +56,20 @@ class _MasterScreenState extends State<MasterScreen> {
       setState(() => _error = 'Enter an item name');
       return;
     }
+    final exists = _items.any(
+      (existing) => existing.toLowerCase() == name.toLowerCase(),
+    );
+    if (exists) {
+      setState(() => _error = 'Same item name already exists');
+      return;
+    }
     try {
       await LocalDb.instance.insertMasterItem(name);
       _nameCtrl.clear();
+      setState(() => _error = null);
       await _reload();
     } catch (_) {
-      setState(() => _error = 'Item already exists or could not be saved');
+      setState(() => _error = 'Same item name already exists');
     }
   }
 
@@ -83,7 +91,7 @@ class _MasterScreenState extends State<MasterScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Add particulars (shirt, pant, etc.) for the sales bill dropdown.',
+                'Add groups (shirt, pant, etc.) for the sales bill dropdown.',
                 style: TextStyle(fontSize: 12, color: AppColors.navy),
               ),
               const SizedBox(height: 12),

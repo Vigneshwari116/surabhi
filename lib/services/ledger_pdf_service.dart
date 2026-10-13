@@ -99,6 +99,7 @@ class LedgerPdfService {
               'BILLNO',
               'DATE',
               'NAME',
+              'GROUP',
               'MOBILE',
               'CASH',
               'CARD/UPI',
@@ -112,6 +113,7 @@ class LedgerPdfService {
                   '${entry.billNo}',
                   _formatDate(entry.date),
                   entry.customerName,
+                  entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
                   entry.mobile.isEmpty ? '—' : entry.mobile,
                   _cashColumnAmount(entry),
                   _cardColumnAmount(entry),
@@ -120,6 +122,7 @@ class LedgerPdfService {
                   money.format(entry.grandTotal),
                 ],
               [
+                '',
                 '',
                 '',
                 '',

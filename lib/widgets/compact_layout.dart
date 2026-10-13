@@ -216,9 +216,9 @@ class CompactAbstractSummary extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: AppTextSizes.listSubtitle,
               fontWeight: FontWeight.w600,
-              color: AppColors.mutedBlue,
+              color: Colors.black,
               letterSpacing: 0.3,
             ),
           ),
@@ -226,9 +226,9 @@ class CompactAbstractSummary extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: AppTextSizes.fieldText,
               fontWeight: FontWeight.w700,
-              color: AppColors.navy,
+              color: Colors.black,
               height: 1.1,
             ),
           ),
@@ -255,8 +255,6 @@ class LocationBrandingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleSize =
         compact ? AppTextSizes.sectionHeader : AppTextSizes.statNumber;
-    final branchSize =
-        compact ? AppTextSizes.listTitle : AppTextSizes.sectionHeader;
 
     return Column(
       crossAxisAlignment: align == TextAlign.center
@@ -269,16 +267,6 @@ class LocationBrandingHeader extends StatelessWidget {
           style: TextStyle(
             fontSize: titleSize,
             fontWeight: FontWeight.bold,
-            color: AppColors.navy,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          branchLabelForDisplayName(locationDisplayName),
-          textAlign: align,
-          style: TextStyle(
-            fontSize: branchSize,
-            fontWeight: FontWeight.w600,
             color: AppColors.navy,
           ),
         ),

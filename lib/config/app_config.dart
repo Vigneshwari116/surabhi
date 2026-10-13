@@ -32,13 +32,35 @@ class AppConfig {
 
   static Future<void> loadFromPrefs() async {
     var prefs = await SharedPreferences.getInstance();
-    _locationCode = prefs.getString('location_code');
+    final stored = prefs.getString('location_code');
+    if (stored == null) {
+      _locationCode = null;
+      return;
+    }
+    final normalized = _normalizeLocationCode(stored);
+    _locationCode = normalized;
+    if (normalized != stored) {
+      await prefs.setString('location_code', normalized);
+    }
   }
 
   static Future<void> setLocation(String code) async {
+    final normalized = _normalizeLocationCode(code);
     var prefs = await SharedPreferences.getInstance();
-    await prefs.setString('location_code', code);
-    _locationCode = code;
+    await prefs.setString('location_code', normalized);
+    _locationCode = normalized;
+  }
+
+  static String _normalizeLocationCode(String code) {
+    switch (code.trim().toLowerCase()) {
+      case 'win1':
+      case 'win2':
+      case 'win3':
+      case 'win4':
+        return 'main';
+      default:
+        return code.trim().toLowerCase();
+    }
   }
 
   static Future<void> clearLocation() async {

@@ -30,17 +30,18 @@ class AppColors {
 class AppTextSizes {
   AppTextSizes._();
 
-  static const appBarTitle = 16.0;
+  /// Legacy billing screen uses ~18pt body text.
+  static const appBarTitle = 18.0;
   static const statNumber = 22.0;
-  static const statLabel = 12.5;
-  static const sectionHeader = 13.0;
-  static const fieldLabel = 13.0;
-  static const fieldText = 14.0;
-  static const listTitle = 13.0;
-  static const listSubtitle = 11.5;
-  static const buttonText = 13.0;
-  static const tableHeaderText = 12.5;
-  static const tableRowText = 12.5;
+  static const statLabel = 18.0;
+  static const sectionHeader = 18.0;
+  static const fieldLabel = 18.0;
+  static const fieldText = 18.0;
+  static const listTitle = 18.0;
+  static const listSubtitle = 16.0;
+  static const buttonText = 18.0;
+  static const tableHeaderText = 18.0;
+  static const tableRowText = 18.0;
 }
 
 class AppTheme {

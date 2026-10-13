@@ -617,7 +617,7 @@ class _LedgerBillDetailScreenState extends State<LedgerBillDetailScreen> {
       child: const Row(
         children: [
           _HeaderCell('S.no', 1),
-          _HeaderCell('Particular', 1),
+          _HeaderCell('Group', 1),
           _HeaderCell('Qty', 1),
           _HeaderCell('RATE', 1),
           _HeaderCell('AMOUNT', 1),
