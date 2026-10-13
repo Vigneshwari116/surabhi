@@ -152,6 +152,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   double _todayAmount = 0;
   double _todayGst = 0;
   double _todayGrandTotal = 0;
+  bool _todaySalesPanelVisible = false;
 
   // ============================================================
   // AUTO FOCUS TIMERS — removed; field advance is Enter-only.
@@ -210,7 +211,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     _loadGstRates();
     unawaited(_loadMasterParticulars());
-    unawaited(_refreshTodaySales());
 
     if (widget.initialBillNo != null) {
       _billNo = widget.initialBillNo!;
@@ -866,7 +866,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       });
 
       await _persistSession();
-      unawaited(_refreshTodaySales());
+      if (_todaySalesPanelVisible) {
+        unawaited(_refreshTodaySales());
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusRate();
@@ -1167,6 +1169,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     required bool mobileBillLayout,
     required bool useSidebarLayout,
   }) {
+    final todaySalesAction = Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _buildTodaySalesButton(compact: true),
+    );
+
     if (mobileBillLayout) {
       return sectionHeaderAppBar(
         'Sales Bill',
@@ -1180,16 +1187,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 },
               )
             : null,
+        actions: widget.embeddedInDashboard ? null : [todaySalesAction],
       );
     }
 
-    return AppBar(
-      toolbarHeight: 52,
-      title: const SizedBox.shrink(),
-      backgroundColor: AppColors.headerBand,
-      foregroundColor: AppColors.navy,
-      iconTheme: const IconThemeData(color: AppColors.navy),
-      elevation: 0,
+    return sectionHeaderAppBar(
+      'SALES BILL',
       automaticallyImplyLeading: !useSidebarLayout,
       leading: useSidebarLayout
           ? IconButton(
@@ -1200,6 +1203,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               },
             )
           : null,
+      actions: widget.embeddedInDashboard ? null : [todaySalesAction],
     );
   }
 
@@ -1216,8 +1220,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               children: [
                 _buildTopArea(),
                 const SizedBox(height: 6),
-                _buildTodaySalesSummary(),
-                const SizedBox(height: 6),
                 _buildRateQtyAmount(),
                 const SizedBox(height: 6),
                 Align(
@@ -1226,6 +1228,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 ),
                 const SizedBox(height: 8),
                 _buildSaveSaleBar(),
+                if (_todaySalesPanelVisible) ...[
+                  const SizedBox(height: 10),
+                  _buildTodaySalesSummary(),
+                ],
               ],
             ),
           ),
@@ -1253,12 +1259,17 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     }
   }
 
+  Future<void> _onTodaySalesPressed() async {
+    setState(() => _todaySalesPanelVisible = true);
+    await _refreshTodaySales();
+  }
+
   Widget _buildTodaySalesButton({bool compact = false}) {
     return SizedBox(
       height: 32,
       child: ElevatedButton(
         key: const Key('today_sales_button'),
-        onPressed: _busy ? null : _refreshTodaySales,
+        onPressed: _busy ? null : _onTodaySalesPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.actionButton,
           foregroundColor: Colors.white,
@@ -1343,13 +1354,15 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 const SizedBox(height: 6),
                 _buildCustomerDetails(),
                 const SizedBox(height: 6),
-                _buildTodaySalesSummary(),
-                const SizedBox(height: 6),
                 _buildRateQtyAmount(mobile: true),
                 const SizedBox(height: 6),
                 _buildItemTableSection(mobile: true),
                 const SizedBox(height: 8),
                 _buildSaveSaleBar(),
+                if (_todaySalesPanelVisible) ...[
+                  const SizedBox(height: 10),
+                  _buildTodaySalesSummary(),
+                ],
               ],
             ),
           ),
@@ -1430,8 +1443,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!widget.embeddedInDashboard) _buildTodaySalesButton(),
-                  if (!widget.embeddedInDashboard) const SizedBox(height: 4),
                   _buildBillNavButton(
                     label: 'PREVIOUS',
                     onPressed: _goToPreviousBill,
@@ -1846,7 +1857,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
-  Widget _buildInlineEntryField({
+  Widget _buildStackedEntryField({
     required String label,
     required TextEditingController controller,
     FocusNode? focusNode,
@@ -1856,6 +1867,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     bool blockTabTraversal = false,
     TextInputAction? textInputAction,
     Key? fieldKey,
+    double width = _entryBoxWidth,
   }) {
     Widget field = TextField(
       key: fieldKey,
@@ -1891,7 +1903,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       );
     }
 
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -1903,9 +1915,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             color: AppColors.navy,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(height: 4),
         SizedBox(
-          width: _entryBoxWidth,
+          width: width,
           height: _entryBoxHeight,
           child: ClipRect(child: field),
         ),
@@ -1913,60 +1925,45 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
-  Widget _buildGroupDropdown() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Text(
-          'Group',
+  Widget _buildItemMasterDropdown() {
+    return SizedBox(
+      width: 130,
+      height: _entryBoxHeight + _entryLabelSize + 4,
+      child: DropdownButtonFormField<String>(
+        key: const Key('bill_group_dropdown'),
+        focusNode: _groupFocus,
+        value: _selectedParticular,
+        isExpanded: true,
+        decoration: _entryDecoration().copyWith(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        hint: Text(
+          'Select',
           style: TextStyle(
             fontSize: _entryLabelSize,
-            fontWeight: FontWeight.w700,
-            color: AppColors.navy,
+            color: Colors.black54,
           ),
         ),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 130,
-          height: _entryBoxHeight,
-          child: DropdownButtonFormField<String>(
-            key: const Key('bill_group_dropdown'),
-            focusNode: _groupFocus,
-            value: _selectedParticular,
-            isExpanded: true,
-            decoration: _entryDecoration().copyWith(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            hint: Text(
-              'Select',
-              style: TextStyle(
-                fontSize: _entryLabelSize,
-                color: Colors.black54,
+        items: _masterParticulars
+            .map(
+              (name) => DropdownMenuItem(
+                value: name,
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: _entryLabelSize),
+                ),
               ),
-            ),
-            items: _masterParticulars
-                .map(
-                  (name) => DropdownMenuItem(
-                    value: name,
-                    child: Text(
-                      name,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: _entryLabelSize),
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (value) {
-              setState(() {
-                _selectedParticular = value;
-                _particularError = null;
-              });
-              _focusRate();
-            },
-          ),
-        ),
-      ],
+            )
+            .toList(growable: false),
+        onChanged: (value) {
+          setState(() {
+            _selectedParticular = value;
+            _particularError = null;
+          });
+          _focusRate();
+        },
+      ),
     );
   }
 
@@ -1975,10 +1972,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         ? Wrap(
             spacing: 10,
             runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.end,
             children: [
-              _buildGroupDropdown(),
-              _buildInlineEntryField(
+              _buildItemMasterDropdown(),
+              _buildStackedEntryField(
                 label: 'Rate',
                 controller: _rateController,
                 focusNode: _rateFocus,
@@ -1988,7 +1985,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 textInputAction: TextInputAction.done,
                 fieldKey: const Key('bill_rate_field'),
               ),
-              _buildInlineEntryField(
+              _buildStackedEntryField(
                 label: 'Qty',
                 controller: _qtyController,
                 focusNode: _qtyFocus,
@@ -1998,7 +1995,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 textInputAction: TextInputAction.done,
                 fieldKey: const Key('bill_qty_field'),
               ),
-              _buildInlineEntryField(
+              _buildStackedEntryField(
                 label: 'Amount',
                 controller: _amountController,
                 readOnly: true,
@@ -2007,11 +2004,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           )
         : Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _buildGroupDropdown(),
+              _buildItemMasterDropdown(),
               const SizedBox(width: 14),
-              _buildInlineEntryField(
+              _buildStackedEntryField(
                 label: 'Rate',
                 controller: _rateController,
                 focusNode: _rateFocus,
@@ -2022,7 +2019,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 fieldKey: const Key('bill_rate_field'),
               ),
               const SizedBox(width: 14),
-              _buildInlineEntryField(
+              _buildStackedEntryField(
                 label: 'Qty',
                 controller: _qtyController,
                 focusNode: _qtyFocus,
@@ -2033,7 +2030,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 fieldKey: const Key('bill_qty_field'),
               ),
               const SizedBox(width: 14),
-              _buildInlineEntryField(
+              _buildStackedEntryField(
                 label: 'Amount',
                 controller: _amountController,
                 readOnly: true,

@@ -46,7 +46,7 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 860;
+  static const double _tableMinWidth = 960;
 
   bool _loading = true;
   bool _pulling = false;
@@ -564,8 +564,9 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         children: [
           _cell('BILLNO', flex: 6, bold: true),
           _cell('DATE', flex: 7, bold: true),
-          _cell('NAME', flex: 10, bold: true),
-          _cell('MOBILE', flex: 8, bold: true),
+          _cell('NAME', flex: 9, bold: true),
+          _cell('GROUP', flex: 7, bold: true),
+          _cell('MOBILE', flex: 7, bold: true),
           _cell('CASH', flex: 7, bold: true, alignRight: true),
           _cell('CARD/UPI', flex: 7, bold: true, alignRight: true),
           _cell('TOTAL', flex: 7, bold: true, alignRight: true),
@@ -584,8 +585,12 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         children: [
           _cell('${entry.billNo}', flex: 6),
           _cell(_formatDate(entry.date), flex: 7),
-          _cell(entry.customerName, flex: 10),
-          _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 8),
+          _cell(entry.customerName, flex: 9),
+          _cell(
+            entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
+            flex: 7,
+          ),
+          _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
           _cell(_paymentColumnAmount(entry, cash: true),
               flex: 7, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: false),
@@ -607,8 +612,9 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         children: [
           _cell('', flex: 6, bold: true),
           _cell('', flex: 7, bold: true),
-          _cell('', flex: 10, bold: true),
-          _cell('', flex: 8, bold: true),
+          _cell('', flex: 9, bold: true),
+          _cell('', flex: 7, bold: true),
+          _cell('', flex: 7, bold: true),
           _cell(_formatMoney(payTotals.cash),
               flex: 7, bold: true, alignRight: true),
           _cell(_formatMoney(payTotals.card),

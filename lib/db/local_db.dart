@@ -44,6 +44,7 @@ class LocalLedgerEntry {
   final double grandTotal;
   final String syncStatus;
   final String updatedAt;
+  final String groupSummary;
 
   const LocalLedgerEntry({
     required this.localId,
@@ -61,6 +62,7 @@ class LocalLedgerEntry {
     required this.grandTotal,
     required this.syncStatus,
     required this.updatedAt,
+    this.groupSummary = '',
   });
 }
 
@@ -269,6 +271,14 @@ class LocalDb {
     return decoded
         .map((entry) => BillItem.fromJson(entry as Map<String, dynamic>))
         .toList(growable: false);
+  }
+
+  static String groupSummaryFromItemsJson(String? itemsJson) {
+    final items = parseBillItems(itemsJson ?? '[]');
+    return items
+        .map((item) => item.particular.trim())
+        .where((name) => name.isNotEmpty)
+        .join(', ');
   }
 
   // ---------------------------------------------------------------------------
@@ -1111,6 +1121,7 @@ class LocalDb {
         grandTotal: (row['grand_total'] as num).toDouble(),
         syncStatus: row['sync_status'] as String? ?? 'pending',
         updatedAt: row['updated_at'] as String? ?? '',
+        groupSummary: groupSummaryFromItemsJson(row['items_json'] as String?),
       );
     } catch (_) {
       return null;

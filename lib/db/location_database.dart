@@ -617,6 +617,9 @@ class LocationDatabase {
         grandTotal: (row['grand_total'] as num).toDouble(),
         syncStatus: row['sync_status'] as String? ?? 'synced',
         updatedAt: row['updated_at'] as String? ?? '',
+        groupSummary: LocalDb.groupSummaryFromItemsJson(
+          row['items_json'] as String?,
+        ),
       );
     } catch (_) {
       return null;

@@ -120,10 +120,7 @@ class BillPrintService {
               for (final line in lines)
                 pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 2),
-                  child: pw.Text(
-                    _displayLine(line),
-                    style: style,
-                  ),
+                  child: _pdfReceiptLine(line, style),
                 ),
             ],
           ),
@@ -165,6 +162,38 @@ class BillPrintService {
   static String _displayLine(String line) {
     final trimmed = line.trim();
     return trimmed.isEmpty ? ' ' : trimmed;
+  }
+
+  /// Preserves thermal receipt alignment (centered shop name, thank-you line).
+  static pw.Widget _pdfReceiptLine(String line, pw.TextStyle style) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      return pw.SizedBox(height: style.fontSize);
+    }
+    if (_isCenteredReceiptLine(line, trimmed)) {
+      return pw.Center(
+        child: pw.Text(trimmed, style: style, textAlign: pw.TextAlign.center),
+      );
+    }
+    return pw.Align(
+      alignment: pw.Alignment.centerLeft,
+      child: pw.Text(_displayLine(line), style: style),
+    );
+  }
+
+  static bool _isCenteredReceiptLine(String raw, String trimmed) {
+    if (trimmed == ReceiptService.businessName) {
+      return true;
+    }
+    if (trimmed.startsWith('GSTIN:')) {
+      return true;
+    }
+    if (trimmed.contains('THANK YOU VISIT AGAIN')) {
+      return true;
+    }
+    final leading = raw.length - raw.trimLeft().length;
+    final trailing = raw.length - raw.trimRight().length;
+    return leading >= 6 && trailing >= 6;
   }
 
   static String _normalizedReceiptText(String text) {

@@ -23,6 +23,7 @@ class LocalLedgerEntry {
   final double igst;
   final double grandTotal;
   final String syncStatus;
+  final String groupSummary;
 
   LocalLedgerEntry({
     required this.localId,
@@ -38,6 +39,7 @@ class LocalLedgerEntry {
     required this.igst,
     required this.grandTotal,
     required this.syncStatus,
+    this.groupSummary = '',
   });
 }
 
@@ -74,6 +76,7 @@ class LedgerRepository {
               igst: row.totalIgst,
               grandTotal: row.grandTotal,
               syncStatus: row.syncStatus,
+              groupSummary: row.groupSummary,
             ),
           )
           .toList(growable: false);
