@@ -1,0 +1,646 @@
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
+
+const PORT = process.env.PORT || 3003;
+
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL environment variable is required');
+  process.exit(1);
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '2mb' }));
+
+async function initDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS bills (
+      id SERIAL PRIMARY KEY,
+      bill_no INTEGER NOT NULL,
+      location TEXT NOT NULL,
+      bill_date DATE NOT NULL,
+      payment_mode TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      mobile TEXT,
+      total_qty DOUBLE PRECISION NOT NULL,
+      total_amount DOUBLE PRECISION NOT NULL,
+      total_cgst DOUBLE PRECISION NOT NULL,
+      total_sgst DOUBLE PRECISION NOT NULL,
+      total_igst DOUBLE PRECISION NOT NULL,
+      grand_total DOUBLE PRECISION NOT NULL,
+      items_json JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (location, bill_no)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bills_location_date
+      ON bills (location, bill_date);
+
+    CREATE INDEX IF NOT EXISTS idx_bills_location_updated_at
+      ON bills (location, updated_at);
+
+    CREATE TABLE IF NOT EXISTS gst_config (
+      location TEXT PRIMARY KEY,
+      cgst_pct DOUBLE PRECISION NOT NULL DEFAULT 2.5,
+      sgst_pct DOUBLE PRECISION NOT NULL DEFAULT 2.5,
+      version TEXT NOT NULL DEFAULT '1',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_totals (
+      location TEXT NOT NULL,
+      bill_date DATE NOT NULL,
+      amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (location, bill_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_daily_totals_bill_date
+      ON daily_totals (bill_date);
+  `);
+
+  await pool.query(`
+    ALTER TABLE bills
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    ALTER TABLE bills
+    ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_bills_location_updated_at
+      ON bills (location, updated_at)
+  `);
+
+  const userCount = await pool.query('SELECT COUNT(*)::int AS count FROM users');
+  if (userCount.rows[0].count === 0) {
+    const hash = bcrypt.hashSync('admin', 10);
+    await pool.query(
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2)',
+      ['admin', hash]
+    );
+    console.log('Default user created: admin / admin');
+  }
+
+  for (const loc of ['win1', 'win2', 'win3']) {
+    await pool.query(
+      `INSERT INTO gst_config (location, cgst_pct, sgst_pct, version)
+       VALUES ($1, 2.5, 2.5, '1')
+       ON CONFLICT (location) DO NOTHING`,
+      [loc]
+    );
+  }
+}
+
+function mapBillRow(row) {
+  return {
+    billNo: row.bill_no,
+    location: row.location,
+    billDate:
+      row.bill_date instanceof Date
+        ? row.bill_date.toISOString().slice(0, 10)
+        : String(row.bill_date).slice(0, 10),
+    paymentMode: row.payment_mode,
+    customerName: row.customer_name,
+    mobile: row.mobile || '',
+    totalQty: Number(row.total_qty),
+    totalAmount: Number(row.total_amount),
+    totalCgst: Number(row.total_cgst),
+    totalSgst: Number(row.total_sgst),
+    totalIgst: Number(row.total_igst),
+    grandTotal: Number(row.grand_total),
+    items:
+      typeof row.items_json === 'string'
+        ? JSON.parse(row.items_json)
+        : row.items_json,
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at
+          ? String(row.updated_at)
+          : null,
+    deleted: Boolean(row.deleted),
+  };
+}
+
+function buildLedgerSummary(entries) {
+  return entries.reduce(
+    (acc, e) => ({
+      total: acc.total + e.total,
+      cgst: acc.cgst + e.cgst,
+      sgst: acc.sgst + e.sgst,
+      igst: acc.igst + e.igst,
+      grandTotal: acc.grandTotal + e.grandTotal,
+    }),
+    { total: 0, cgst: 0, sgst: 0, igst: 0, grandTotal: 0 }
+  );
+}
+
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, db: 'connected', engine: 'postgresql' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, db: 'disconnected', engine: 'postgresql' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const username = String(req.body?.username ?? '').trim();
+  const password = String(req.body?.password ?? '');
+  if (!username || !password) {
+    return res.status(400).json({ ok: false, error: 'Username and password required' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+      [username]
+    );
+    const user = result.rows[0];
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.status(200).json({ ok: false, error: 'Invalid username or password' });
+    }
+    res.json({ ok: true, user: { username: user.username } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Login failed' });
+  }
+});
+
+app.get('/api/bills/next-number', async (req, res) => {
+  const location = req.query.location;
+  if (!location) {
+    return res.status(400).json({ error: 'location parameter is required' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT MAX(bill_no) AS max_no FROM bills WHERE location = $1',
+      [location]
+    );
+    const billNo = (result.rows[0]?.max_no || 0) + 1;
+    res.json({ ok: true, billNo });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load bill number' });
+  }
+});
+
+app.get('/api/bills/updates-since', async (req, res) => {
+  return handleBillUpdatesSince(req, res);
+});
+
+/// Preferred pull path — cannot collide with /api/bills/:billNo.
+app.get('/api/sync/bill-updates', async (req, res) => {
+  return handleBillUpdatesSince(req, res);
+});
+
+async function handleBillUpdatesSince(req, res) {
+  const location = req.query.location;
+  const since = req.query.since;
+
+  if (!location) {
+    return res.status(400).json({ ok: false, error: 'location parameter is required' });
+  }
+
+  const sinceDate = since ? new Date(String(since)) : new Date(0);
+  if (Number.isNaN(sinceDate.getTime())) {
+    return res.status(400).json({ ok: false, error: 'Invalid since timestamp' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM bills
+       WHERE location = $1 AND updated_at > $2::timestamptz
+       ORDER BY bill_no ASC`,
+      [location, sinceDate.toISOString()]
+    );
+
+    const serverTime = new Date().toISOString();
+    res.json({
+      ok: true,
+      bills: result.rows.map(mapBillRow),
+      serverTime,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load bill updates' });
+  }
+}
+
+app.get('/api/bills/by-number/previous', async (req, res) => {
+  const billNo = parseInt(req.query.billNo, 10);
+  const location = req.query.location;
+  if (!location) {
+    return res.status(400).json({ error: 'location parameter is required' });
+  }
+  if (!Number.isFinite(billNo)) {
+    return res.status(400).json({ ok: false, error: 'Invalid bill number' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM bills
+       WHERE location = $1 AND bill_no < $2 AND deleted IS NOT TRUE
+       ORDER BY bill_no DESC
+       LIMIT 1`,
+      [location, billNo]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(404).json({ ok: false, error: 'No previous bill found' });
+    }
+    res.json({ ok: true, bill: mapBillRow(row) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load previous bill' });
+  }
+});
+
+app.get('/api/bills/:billNo(\\d+)', async (req, res) => {
+  const billNo = parseInt(req.params.billNo, 10);
+  const location = req.query.location;
+  if (!location) {
+    return res.status(400).json({ error: 'location parameter is required' });
+  }
+  if (!Number.isFinite(billNo) || billNo <= 0) {
+    return res.status(400).json({ ok: false, error: 'Invalid bill number' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM bills WHERE location = $1 AND bill_no = $2 LIMIT 1',
+      [location, billNo]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(404).json({ ok: false, error: 'Bill not found' });
+    }
+    res.json({ ok: true, bill: mapBillRow(row) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load bill' });
+  }
+});
+
+app.post('/api/bills', async (req, res) => {
+  const bill = req.body || {};
+  const required = [
+    'billNo',
+    'location',
+    'billDate',
+    'paymentMode',
+    'customerName',
+    'items',
+    'totalQty',
+    'totalAmount',
+    'totalCgst',
+    'totalSgst',
+    'totalIgst',
+    'grandTotal',
+  ];
+
+  for (const key of required) {
+    if (bill[key] === undefined || bill[key] === null) {
+      return res.status(400).json({ ok: false, error: `Missing field: ${key}` });
+    }
+  }
+
+  const billNo = Number(bill.billNo);
+  if (!Number.isFinite(billNo) || billNo <= 0 || !Number.isInteger(billNo)) {
+    return res.status(400).json({ ok: false, error: 'Invalid bill number' });
+  }
+  bill.billNo = billNo;
+
+  if (!Array.isArray(bill.items) || bill.items.length === 0) {
+    return res.status(400).json({ ok: false, error: 'At least one item is required' });
+  }
+
+  try {
+    const deleted = Boolean(bill.deleted);
+    const existing = await pool.query(
+      'SELECT id FROM bills WHERE location = $1 AND bill_no = $2 LIMIT 1',
+      [bill.location, bill.billNo]
+    );
+
+    const itemsJson = JSON.stringify(bill.items);
+
+    if (existing.rowCount > 0) {
+      await pool.query(
+        `UPDATE bills SET
+          bill_date = $1,
+          payment_mode = $2,
+          customer_name = $3,
+          mobile = $4,
+          total_qty = $5,
+          total_amount = $6,
+          total_cgst = $7,
+          total_sgst = $8,
+          total_igst = $9,
+          grand_total = $10,
+          items_json = $11::jsonb,
+          deleted = $12,
+          updated_at = NOW()
+        WHERE location = $13 AND bill_no = $14`,
+        [
+          bill.billDate,
+          bill.paymentMode,
+          bill.customerName,
+          bill.mobile || '',
+          bill.totalQty,
+          bill.totalAmount,
+          bill.totalCgst,
+          bill.totalSgst,
+          bill.totalIgst,
+          bill.grandTotal,
+          itemsJson,
+          deleted,
+          bill.location,
+          bill.billNo,
+        ]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO bills (
+          bill_no, location, bill_date, payment_mode, customer_name, mobile,
+          total_qty, total_amount, total_cgst, total_sgst, total_igst, grand_total,
+          items_json, deleted, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,NOW())`,
+        [
+          bill.billNo,
+          bill.location,
+          bill.billDate,
+          bill.paymentMode,
+          bill.customerName,
+          bill.mobile || '',
+          bill.totalQty,
+          bill.totalAmount,
+          bill.totalCgst,
+          bill.totalSgst,
+          bill.totalIgst,
+          bill.grandTotal,
+          itemsJson,
+          deleted,
+        ]
+      );
+    }
+
+    res.json({ ok: true, billNo: bill.billNo });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Failed to save bill' });
+  }
+});
+
+app.get('/api/gst/sync', async (req, res) => {
+  const location = String(req.query.location ?? '').trim().toLowerCase();
+  if (!location) {
+    return res.status(400).json({ ok: false, error: 'location parameter is required' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM gst_config WHERE location = $1 LIMIT 1',
+      [location]
+    );
+    const row = result.rows[0] ?? { cgst_pct: 2.5, sgst_pct: 2.5, version: '1' };
+
+    res.json({
+      ok: true,
+      db_name: `${location}_gst`,
+      version: String(row.version ?? '1'),
+      data: [
+        { key: 'cgst_pct', value: String(row.cgst_pct ?? 2.5) },
+        { key: 'sgst_pct', value: String(row.sgst_pct ?? 2.5) },
+      ],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load GST config' });
+  }
+});
+
+app.post('/api/gst/config', async (req, res) => {
+  const location = String(req.body?.location ?? '').trim().toLowerCase();
+  const cgstPct = Number(req.body?.cgstPct);
+  const sgstPct = Number(req.body?.sgstPct);
+
+  if (!location) {
+    return res.status(400).json({ ok: false, error: 'location is required' });
+  }
+  if (!Number.isFinite(cgstPct) || !Number.isFinite(sgstPct)) {
+    return res.status(400).json({ ok: false, error: 'Invalid GST percentages' });
+  }
+
+  try {
+    const version = Date.now().toString();
+    await pool.query(
+      `INSERT INTO gst_config (location, cgst_pct, sgst_pct, version, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (location) DO UPDATE SET
+         cgst_pct = EXCLUDED.cgst_pct,
+         sgst_pct = EXCLUDED.sgst_pct,
+         version = EXCLUDED.version,
+         updated_at = NOW()`,
+      [location, cgstPct, sgstPct, version]
+    );
+
+    res.json({ ok: true, version });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not save GST config' });
+  }
+});
+
+app.get('/api/ledger', async (req, res) => {
+  const location = req.query.location;
+  if (!location) {
+    return res.status(400).json({ error: 'location parameter is required' });
+  }
+  const { from, to } = req.query;
+
+  try {
+    let sql = `SELECT bill_no, bill_date, payment_mode, total_amount, total_cgst,
+                      total_sgst, total_igst, grand_total
+               FROM bills
+               WHERE location = $1 AND deleted IS NOT TRUE`;
+    const params = [location];
+
+    if (from) {
+      params.push(from);
+      sql += ` AND bill_date >= $${params.length}`;
+    }
+    if (to) {
+      params.push(to);
+      sql += ` AND bill_date <= $${params.length}`;
+    }
+
+    sql += ' ORDER BY bill_no ASC';
+    const result = await pool.query(sql, params);
+
+    const entries = result.rows.map((row) => ({
+      billNo: row.bill_no,
+      date:
+        row.bill_date instanceof Date
+          ? row.bill_date.toISOString().slice(0, 10)
+          : String(row.bill_date).slice(0, 10),
+      paymentMode: row.payment_mode,
+      total: Number(row.total_amount),
+      cgst: Number(row.total_cgst),
+      sgst: Number(row.total_sgst),
+      igst: Number(row.total_igst),
+      grandTotal: Number(row.grand_total),
+    }));
+
+    res.json({ ok: true, entries, summary: buildLedgerSummary(entries) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load ledger' });
+  }
+});
+
+const ACTIVE_LOCATION_CODES = ['win1', 'win2', 'win3'];
+
+function normalizeLocationCode(location) {
+  const code = String(location ?? '').trim().toLowerCase();
+  if (!ACTIVE_LOCATION_CODES.includes(code)) {
+    return null;
+  }
+  return code;
+}
+
+function normalizeBillDate(value) {
+  const raw = String(value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return null;
+  }
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return raw;
+}
+
+app.post('/api/daily-total', async (req, res) => {
+  const location = normalizeLocationCode(req.body?.location);
+  const date = normalizeBillDate(req.body?.date);
+  const amount = Number(req.body?.amount);
+
+  if (!location) {
+    return res.status(400).json({ ok: false, error: 'Invalid location' });
+  }
+  if (!date) {
+    return res.status(400).json({ ok: false, error: 'Invalid date' });
+  }
+  if (!Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ ok: false, error: 'Invalid amount' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO daily_totals (location, bill_date, amount)
+       VALUES ($1, $2::date, $3)
+       ON CONFLICT (location, bill_date)
+       DO UPDATE SET
+         amount = daily_totals.amount + EXCLUDED.amount,
+         updated_at = NOW()
+       RETURNING amount`,
+      [location, date, amount]
+    );
+
+    res.json({
+      ok: true,
+      location,
+      date,
+      amount: Number(result.rows[0].amount),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not update daily total' });
+  }
+});
+
+app.get('/api/daily-totals', async (req, res) => {
+  const date = normalizeBillDate(req.query.date);
+  if (!date) {
+    return res.status(400).json({ ok: false, error: 'date query parameter is required (YYYY-MM-DD)' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT location, amount
+       FROM daily_totals
+       WHERE bill_date = $1::date`,
+      [date]
+    );
+
+    const totals = { win1: 0, win2: 0, win3: 0 };
+    for (const row of result.rows) {
+      const code = normalizeLocationCode(row.location);
+      if (code) {
+        totals[code] = Number(row.amount);
+      }
+    }
+
+    res.json({ ok: true, date, totals });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not load daily totals' });
+  }
+});
+
+const RESET_PASSWORD = 'RKS';
+
+app.post('/api/locations/reset', async (req, res) => {
+  const password = String(req.body?.password ?? '');
+  const location = String(req.body?.location ?? '').trim();
+
+  if (password !== RESET_PASSWORD) {
+    return res.status(403).json({ ok: false, error: 'Incorrect password' });
+  }
+
+  if (!location) {
+    return res.status(400).json({ ok: false, error: 'location is required' });
+  }
+
+  const activeLocations = ['Win1', 'Win2', 'Win3'];
+  if (!activeLocations.includes(location)) {
+    return res.status(400).json({ ok: false, error: 'Invalid location' });
+  }
+
+  try {
+    await pool.query('DELETE FROM bills WHERE location = $1', [location]);
+    res.json({ ok: true, location, message: 'Location sales data reset' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: 'Could not reset location data' });
+  }
+});
+
+async function start() {
+  await initDatabase();
+  console.log('Using PostgreSQL database');
+
+  app.listen(PORT, () => {
+    console.log(`Sales Bill API listening on port ${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
