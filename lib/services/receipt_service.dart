@@ -85,7 +85,7 @@ class ReceiptService {
 
   static String _itemHeader() {
     return '${_padRight('SNO', _snoW)}'
-        '${_padRight('PARTICULAR', _partW)}'
+        '${_padRight('GROUP', _partW)}'
         '${_padRight('RATE', _rateW)}'
         '${_padRight('QTY', _qtyW)}'
         '${_padLeft('AMOUNT', _amountW)}';

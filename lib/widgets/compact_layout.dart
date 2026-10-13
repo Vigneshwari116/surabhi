@@ -255,8 +255,6 @@ class LocationBrandingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleSize =
         compact ? AppTextSizes.sectionHeader : AppTextSizes.statNumber;
-    final branchSize =
-        compact ? AppTextSizes.listTitle : AppTextSizes.sectionHeader;
 
     return Column(
       crossAxisAlignment: align == TextAlign.center
@@ -269,16 +267,6 @@ class LocationBrandingHeader extends StatelessWidget {
           style: TextStyle(
             fontSize: titleSize,
             fontWeight: FontWeight.bold,
-            color: AppColors.navy,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          branchLabelForDisplayName(locationDisplayName),
-          textAlign: align,
-          style: TextStyle(
-            fontSize: branchSize,
-            fontWeight: FontWeight.w600,
             color: AppColors.navy,
           ),
         ),

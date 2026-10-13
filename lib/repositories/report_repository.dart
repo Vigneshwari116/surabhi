@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 
@@ -18,6 +19,7 @@ class ReportBillRow {
   final double cgst;
   final double sgstIgst;
   final double grandTotal;
+  final String group;
 
   const ReportBillRow({
     required this.billNo,
@@ -25,6 +27,7 @@ class ReportBillRow {
     required this.customerName,
     required this.mobile,
     required this.paymentMode,
+    required this.group,
     required this.total,
     required this.cgst,
     required this.sgstIgst,
@@ -148,11 +151,16 @@ class ReportRepository {
         to: toKey,
       );
 
+      final locationName = displayNameForLocationCode(code);
       for (final entry in entries) {
         final periodKey = _bucketKeyForBillDate(entry.billDate, granularity);
         final bucket = billsByPeriod[periodKey];
         if (bucket == null) continue;
-        bucket.add(_entryToRow(entry));
+        final group = await _groupSummaryForBill(
+          location: locationName,
+          localId: entry.localId,
+        );
+        bucket.add(_entryToRow(entry, group: group));
       }
     }
 
@@ -254,13 +262,34 @@ class ReportRepository {
     }
   }
 
-  static ReportBillRow _entryToRow(LocalLedgerEntry entry) {
+  static Future<String> _groupSummaryForBill({
+    required String location,
+    required String localId,
+  }) async {
+    final bill = await LedgerRepository.getBillByLocalId(
+      location: location,
+      localId: localId,
+    );
+    if (bill == null || bill.items.isEmpty) {
+      return '';
+    }
+    return bill.items
+        .map((item) => item.particular.trim())
+        .where((name) => name.isNotEmpty)
+        .join(', ');
+  }
+
+  static ReportBillRow _entryToRow(
+    LocalLedgerEntry entry, {
+    required String group,
+  }) {
     return ReportBillRow(
       billNo: entry.billNo,
       date: entry.billDate,
       customerName: entry.customerName,
       mobile: entry.mobile,
       paymentMode: entry.paymentMode,
+      group: group,
       total: entry.totalAmount,
       cgst: entry.totalCgst,
       sgstIgst: entry.totalSgst + entry.totalIgst,

@@ -63,7 +63,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const Color billNoColor = Color(0xFF7FE8E8);
   static const double _entryBoxWidth = 92;
   static const double _entryBoxHeight = 38;
-  static const double _entryLabelSize = 13.0;
+  static const double _entryLabelSize = 18.0;
   static const double _desktopBreakpoint = 900;
   static const double _sidebarBreakpoint = 700;
   static const double _sidebarWidth = 200;
@@ -540,7 +540,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   bool _validateParticular({bool focusOnError = true}) {
     final selected = _selectedParticular?.trim() ?? '';
     if (selected.isEmpty) {
-      setState(() => _particularError = 'Select a particular from master');
+      setState(() => _particularError = 'Select a group from MASTER');
       if (focusOnError) {
         _showMessage('Add items in MASTER menu, then select here');
       }
@@ -1184,11 +1184,96 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
+  Future<void> _showTodaySales() async {
+    final now = DateTime.now();
+    final dayKey =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+
+    try {
+      await LocalDb.instance.initialize();
+      final entries = await LocalDb.instance.getLedgerEntries(
+        _selectedLocation,
+        from: dayKey,
+        to: dayKey,
+      );
+
+      var taxable = 0.0;
+      var gst = 0.0;
+      var grand = 0.0;
+      for (final entry in entries) {
+        taxable += entry.totalAmount;
+        gst += entry.totalCgst + entry.totalSgst + entry.totalIgst;
+        grand += entry.grandTotal;
+      }
+
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text(
+            'Today sales',
+            style: TextStyle(fontSize: AppTextSizes.sectionHeader),
+          ),
+          content: Text(
+            'Amount: ${_format(taxable)}\n'
+            'GST: ${_format(gst)}\n'
+            'Total sales: ${_format(grand)}\n'
+            'Bills: ${entries.length}',
+            style: const TextStyle(fontSize: AppTextSizes.fieldText),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('Could not load today sales');
+    }
+  }
+
   Widget _buildSaveSaleBar() {
-    return CompactSaveButton(
-      buttonKey: const Key('save_sale_bar_button'),
-      label: 'SAVE SALE',
-      onPressed: _saveBill,
+    return Row(
+      children: [
+        CompactSaveButton(
+          buttonKey: const Key('save_sale_bar_button'),
+          label: 'SAVE SALE',
+          onPressed: _saveBill,
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          height: 36,
+          child: ElevatedButton(
+            key: const Key('today_sales_button'),
+            onPressed: _busy ? null : _showTodaySales,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.actionButton,
+              foregroundColor: Colors.white,
+              textStyle: const TextStyle(
+                fontSize: AppTextSizes.buttonText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: const Text('TODAY SALES'),
+          ),
+        ),
+        if (_particularError != null) ...[
+          const SizedBox(width: 12),
+          Text(
+            _particularError!,
+            style: const TextStyle(
+              color: AppColors.danger,
+              fontSize: AppTextSizes.listSubtitle,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1770,64 +1855,41 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
-  Widget _buildParticularDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          'particular',
-          style: TextStyle(
-            fontSize: _entryLabelSize,
-            fontWeight: FontWeight.w700,
-            color: AppColors.navy,
-          ),
+  Widget _buildGroupDropdown() {
+    return SizedBox(
+      width: 160,
+      height: _entryBoxHeight,
+      child: DropdownButtonFormField<String>(
+        key: const Key('bill_group_dropdown'),
+        value: _selectedParticular,
+        isExpanded: true,
+        decoration: _entryDecoration().copyWith(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
         ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 140,
-          height: _entryBoxHeight,
-          child: DropdownButtonFormField<String>(
-            key: const Key('bill_particular_dropdown'),
-            value: _selectedParticular,
-            isExpanded: true,
-            decoration: _entryDecoration().copyWith(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            hint: const Text(
-              'Select',
-              style: TextStyle(fontSize: 12),
-            ),
-            items: _masterParticulars
-                .map(
-                  (name) => DropdownMenuItem(
-                    value: name,
-                    child: Text(
-                      name,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (value) {
-              setState(() {
-                _selectedParticular = value;
-                _particularError = null;
-              });
-              _focusRate();
-            },
-          ),
+        hint: Text(
+          'Group',
+          style: TextStyle(fontSize: _entryLabelSize, color: Colors.black54),
         ),
-        if (_particularError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              _particularError!,
-              style: const TextStyle(color: Colors.red, fontSize: 9),
-            ),
-          ),
-      ],
+        items: _masterParticulars
+            .map(
+              (name) => DropdownMenuItem(
+                value: name,
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: _entryLabelSize),
+                ),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: (value) {
+          setState(() {
+            _selectedParticular = value;
+            _particularError = null;
+          });
+          _focusRate();
+        },
+      ),
     );
   }
 
@@ -1838,9 +1900,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _buildParticularDropdown(),
+              _buildGroupDropdown(),
               _buildInlineEntryField(
-                label: 'rate',
+                label: 'Rate',
                 controller: _rateController,
                 focusNode: _rateFocus,
                 onChanged: _rateChanged,
@@ -1850,7 +1912,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 fieldKey: const Key('bill_rate_field'),
               ),
               _buildInlineEntryField(
-                label: 'qty',
+                label: 'Qty',
                 controller: _qtyController,
                 focusNode: _qtyFocus,
                 onChanged: _qtyChanged,
@@ -1860,7 +1922,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 fieldKey: const Key('bill_qty_field'),
               ),
               _buildInlineEntryField(
-                label: 'amount',
+                label: 'Amount',
                 controller: _amountController,
                 readOnly: true,
               ),
@@ -1870,10 +1932,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildParticularDropdown(),
+              _buildGroupDropdown(),
               const SizedBox(width: 14),
               _buildInlineEntryField(
-                label: 'rate',
+                label: 'Rate',
                 controller: _rateController,
                 focusNode: _rateFocus,
                 onChanged: _rateChanged,
@@ -1884,7 +1946,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ),
               const SizedBox(width: 14),
               _buildInlineEntryField(
-                label: 'qty',
+                label: 'Qty',
                 controller: _qtyController,
                 focusNode: _qtyFocus,
                 onChanged: _qtyChanged,
@@ -1895,7 +1957,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ),
               const SizedBox(width: 14),
               _buildInlineEntryField(
-                label: 'amount',
+                label: 'Amount',
                 controller: _amountController,
                 readOnly: true,
               ),
@@ -2019,7 +2081,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       child: Row(
         children: [
           _tableHeaderCell('S.no', 45),
-          _tableHeaderCell('Particular', 100),
+          _tableHeaderCell('Group', 100),
           _tableHeaderCell('RATE', 65),
           _tableHeaderCell('Qty', 55),
           _tableHeaderCell('AMOUNT', 95),
@@ -2053,7 +2115,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 9,
+            fontSize: AppTextSizes.tableHeaderText,
             fontWeight: FontWeight.bold,
             height: 1,
           ),

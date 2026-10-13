@@ -41,9 +41,9 @@ void main() {
     _expectBalancedMargins(text);
   });
 
-  test('item table includes particular column aligned under headers', () {
+  test('item table includes group column aligned under headers', () {
     final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
-    final header = lines.firstWhere((line) => line.contains('PARTICULAR'));
+    final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
       (line) => line.contains('Shirt') && line.contains('50.00'),
     );
@@ -51,7 +51,7 @@ void main() {
     expect(header.length, _paperWidth);
     expect(itemLine.length, _paperWidth);
     expect(header.trim(), contains('SNO'));
-    expect(header.trim(), contains('PARTICULAR'));
+    expect(header.trim(), contains('GROUP'));
     expect(header.trim(), contains('RATE'));
     expect(header.trim(), contains('QTY'));
     expect(header.trim(), contains('AMOUNT'));

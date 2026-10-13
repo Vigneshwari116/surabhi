@@ -100,12 +100,19 @@ class LedgerRepository {
     required String location,
     required String localId,
   }) async {
-    final locationCode = locationCodeFromDisplayName(location);
-
-    if (AppConfig.isLocationSet && AppConfig.locationCode == locationCode) {
-      return db.LocalDb.instance.getBillByLocalId(localId);
+    if (AppConfig.isLocationSet) {
+      try {
+        await db.LocalDb.instance.initialize();
+        final fromActiveDb = await db.LocalDb.instance.getBillByLocalId(localId);
+        if (fromActiveDb != null) {
+          return fromActiveDb;
+        }
+      } catch (_) {
+        // Fall through to per-location file read.
+      }
     }
 
+    final locationCode = locationCodeFromDisplayName(location);
     return LocationDatabase.getBillByLocalId(
       locationCode: locationCode,
       localId: localId,

@@ -158,6 +158,7 @@ void main() {
               customerName: 'Alice',
               mobile: '9000000001',
               paymentMode: 'CASH',
+              group: 'Shirt',
               total: 100,
               cgst: 2.5,
               sgstIgst: 2.5,

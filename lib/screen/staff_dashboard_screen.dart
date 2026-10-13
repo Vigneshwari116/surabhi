@@ -177,25 +177,13 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
             header: _sidebarExpanded
                 ? Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Surabhi',
-                          style: TextStyle(
-                            fontSize: AppTextSizes.appBarTitle,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          branchLabelForDisplayName(_location),
-                          style: const TextStyle(
-                            fontSize: AppTextSizes.listSubtitle,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    child: const Text(
+                      'Surabhi',
+                      style: TextStyle(
+                        fontSize: AppTextSizes.appBarTitle,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   )
                 : null,

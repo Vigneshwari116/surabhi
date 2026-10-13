@@ -83,7 +83,7 @@ class _MasterScreenState extends State<MasterScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Add particulars (shirt, pant, etc.) for the sales bill dropdown.',
+                'Add groups (shirt, pant, etc.) for the sales bill dropdown.',
                 style: TextStyle(fontSize: 12, color: AppColors.navy),
               ),
               const SizedBox(height: 12),

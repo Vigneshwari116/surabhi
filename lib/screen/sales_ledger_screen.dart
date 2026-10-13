@@ -241,8 +241,9 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
       return;
     }
 
-    final updated = await Navigator.of(context).push<bool>(
+    final updated = await Navigator.of(context, rootNavigator: true).push<bool>(
       MaterialPageRoute<bool>(
+        fullscreenDialog: true,
         builder: (_) => LedgerBillDetailScreen(
           bill: bill,
           localId: entry.localId,
@@ -644,7 +645,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           textAlign: alignRight ? TextAlign.right : TextAlign.left,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 9,
+            fontSize: AppTextSizes.tableRowText,
             fontWeight: bold ? FontWeight.bold : FontWeight.w500,
             color: AppColors.navy,
           ),
