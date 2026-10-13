@@ -1209,43 +1209,26 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildDesktopBody() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTopArea(),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-          child: Align(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildTopArea(),
+          const SizedBox(height: 6),
+          Align(
             alignment: Alignment.topLeft,
             child: _buildItemTableSection(),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildSaveSaleBar(),
-              if (_todaySalesPanelVisible) ...[
-                const SizedBox(height: 10),
-                _buildTodaySalesSummary(),
-              ],
-            ],
-          ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          _buildSaveSaleBar(),
+          if (_todaySalesPanelVisible) ...[
+            const SizedBox(height: 10),
+            _buildTodaySalesSummary(),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1349,42 +1332,25 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildMobileBody(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildBillDetails(mobile: true),
-                const SizedBox(height: 6),
-                _buildCustomerDetails(),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-          child: _buildItemTableSection(mobile: true),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildSaveSaleBar(),
-              if (_todaySalesPanelVisible) ...[
-                const SizedBox(height: 10),
-                _buildTodaySalesSummary(),
-              ],
-            ],
-          ),
-        ),
-      ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildBillDetails(mobile: true),
+          const SizedBox(height: 6),
+          _buildCustomerDetails(),
+          const SizedBox(height: 6),
+          _buildItemTableSection(mobile: true),
+          const SizedBox(height: 8),
+          _buildSaveSaleBar(),
+          if (_todaySalesPanelVisible) ...[
+            const SizedBox(height: 10),
+            _buildTodaySalesSummary(),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1961,6 +1927,29 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
+  Widget _buildStackedGroupDropdown() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Text(
+          'Group',
+          style: TextStyle(
+            fontSize: _entryLabelSize,
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: _entryBoxWidth,
+          height: _entryBoxHeight,
+          child: _buildItemMasterDropdown(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildItemMasterDropdown() {
     return DropdownButtonFormField<String>(
       key: const Key('bill_group_dropdown'),
@@ -1969,20 +1958,21 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       isExpanded: true,
       alignment: AlignmentDirectional.bottomStart,
       decoration: _entryDecoration().copyWith(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 11),
       ),
       dropdownColor: Colors.white,
       style: const TextStyle(
-        fontSize: _entryLabelSize,
+        fontSize: AppTextSizes.fieldText,
         color: Colors.black,
-        fontWeight: FontWeight.w600,
+        height: 1,
       ),
-      icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.black, size: 22),
       hint: const Text(
         'Select',
         style: TextStyle(
-          fontSize: _entryLabelSize,
+          fontSize: AppTextSizes.fieldText,
           color: Colors.black54,
+          height: 1,
         ),
       ),
       items: _masterParticulars
@@ -1993,8 +1983,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 name,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: _entryLabelSize,
+                  fontSize: AppTextSizes.fieldText,
                   color: Colors.black,
+                  height: 1,
                 ),
               ),
             ),
@@ -2010,6 +2001,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
+  static const double _entryColumnGap = 14;
+
   Widget _buildAlignedEntryRow({required bool showTax, bool mobile = false}) {
     if (mobile) {
       return _buildEntryRowFallbackMobile();
@@ -2020,60 +2013,38 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(flex: _flexSno, child: const SizedBox.shrink()),
-            Expanded(
-              flex: _flexGroup,
-              child: SizedBox(
-                height: _entryBoxHeight,
-                child: _buildItemMasterDropdown(),
-              ),
+            _buildStackedGroupDropdown(),
+            const SizedBox(width: _entryColumnGap),
+            _buildStackedEntryField(
+              label: 'Rate',
+              controller: _rateController,
+              focusNode: _rateFocus,
+              onChanged: _rateChanged,
+              onSubmitted: _rateSubmitted,
+              blockTabTraversal: true,
+              textInputAction: TextInputAction.next,
+              fieldKey: const Key('bill_rate_field'),
             ),
-            Expanded(
-              flex: _flexRate,
-              child: _buildStackedEntryField(
-                label: 'Rate',
-                controller: _rateController,
-                focusNode: _rateFocus,
-                onChanged: _rateChanged,
-                onSubmitted: _rateSubmitted,
-                blockTabTraversal: true,
-                textInputAction: TextInputAction.next,
-                fieldKey: const Key('bill_rate_field'),
-                width: double.infinity,
-              ),
+            const SizedBox(width: _entryColumnGap),
+            _buildStackedEntryField(
+              label: 'Qty',
+              controller: _qtyController,
+              focusNode: _qtyFocus,
+              onChanged: _qtyChanged,
+              onSubmitted: _qtySubmitted,
+              blockTabTraversal: true,
+              textInputAction: TextInputAction.done,
+              fieldKey: const Key('bill_qty_field'),
             ),
-            Expanded(
-              flex: _flexQty,
-              child: _buildStackedEntryField(
-                label: 'Qty',
-                controller: _qtyController,
-                focusNode: _qtyFocus,
-                onChanged: _qtyChanged,
-                onSubmitted: _qtySubmitted,
-                blockTabTraversal: true,
-                textInputAction: TextInputAction.done,
-                fieldKey: const Key('bill_qty_field'),
-                width: double.infinity,
-              ),
+            const SizedBox(width: _entryColumnGap),
+            _buildStackedEntryField(
+              label: 'Amount',
+              controller: _amountController,
+              readOnly: true,
             ),
-            Expanded(
-              flex: _flexAmount,
-              child: _buildStackedEntryField(
-                label: 'Amount',
-                controller: _amountController,
-                readOnly: true,
-                width: double.infinity,
-              ),
-            ),
-            if (showTax) ...[
-              const Expanded(flex: 95, child: SizedBox.shrink()),
-              const Expanded(flex: 70, child: SizedBox.shrink()),
-              const Expanded(flex: 70, child: SizedBox.shrink()),
-              const Expanded(flex: 65, child: SizedBox.shrink()),
-            ],
-            const SizedBox(width: _deleteColWidth),
           ],
         ),
         ..._entryRowErrors(),
@@ -2087,15 +2058,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Wrap(
-          spacing: 10,
+          spacing: _entryColumnGap,
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.end,
           children: [
-            SizedBox(
-              width: 160,
-              height: _entryBoxHeight,
-              child: _buildItemMasterDropdown(),
-            ),
+            _buildStackedGroupDropdown(),
             _buildStackedEntryField(
               label: 'Rate',
               controller: _rateController,
@@ -2161,31 +2128,34 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     final showTax = _items.isNotEmpty;
     final width = _tableWidth(showTax);
 
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.cardWhite,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: width,
-            child: _buildAlignedEntryRow(showTax: showTax, mobile: mobile),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildAlignedEntryRow(showTax: showTax, mobile: mobile),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(6),
           ),
-          const SizedBox(height: 6),
-          _buildItemTable(mobile: mobile),
-          if (_items.isNotEmpty) ...[
-            SizedBox(
-              width: width,
-              child: _buildGrandTotalFooter(),
-            ),
-          ],
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildItemTable(mobile: mobile),
+              if (_items.isNotEmpty) ...[
+                SizedBox(
+                  width: width,
+                  child: _buildGrandTotalFooter(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -2256,6 +2226,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       flex: flex,
       child: Container(
         height: 32,
+        padding: EdgeInsets.only(
+          left: text == 'RATE' ? 6 : 2,
+          right: text == 'Group' ? 8 : 2,
+        ),
         decoration: BoxDecoration(
           border: Border(
             right: last
