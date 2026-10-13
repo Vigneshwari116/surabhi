@@ -15,11 +15,12 @@ class ReceiptService {
   static const int _margin = (_paperWidth - _contentWidth) ~/ 2;
 
   static const int _snoW = 3;
-  static const int _partW = 11;
+  static const int _gapW = 1;
+  static const int _partW = 9;
   static const int _rateW = 6;
   static const int _qtyW = 4;
   static const int _amountW =
-      _contentWidth - _snoW - _partW - _rateW - _qtyW;
+      _contentWidth - _snoW - _gapW - _partW - _rateW - _qtyW;
   static const int _labelW = _contentWidth - _amountW;
 
   static String buildReceiptText(SaleBill bill) {
@@ -35,7 +36,9 @@ class ReceiptService {
     final line = _formatLeft('-' * _contentWidth);
 
     buffer.writeln(_formatCentered(_center(businessName)));
-    buffer.writeln(_formatLeft(_singleLineAddress(profile.addressLine)));
+    for (final addressLine in _addressLines(profile.addressLine)) {
+      buffer.writeln(_formatCentered(_center(addressLine)));
+    }
     buffer.writeln(_formatCentered(_center('GSTIN:$gstin')));
     buffer.writeln(_formatLeft(_billDateLine(bill.billNo, dateText)));
     buffer.writeln(_formatLeft(_fieldLine('NAME', bill.customerName)));
@@ -62,6 +65,21 @@ class ReceiptService {
     return buffer.toString();
   }
 
+  static List<String> _addressLines(String address) {
+    final trimmed = address.trim();
+    if (trimmed.length <= _contentWidth) {
+      return [trimmed];
+    }
+    final parts = trimmed.split(',');
+    if (parts.length >= 2) {
+      final mid = parts.length ~/ 2;
+      final line1 = parts.sublist(0, mid).join(',').trim();
+      final line2 = parts.sublist(mid).join(',').trim();
+      return [line1, line2];
+    }
+    return [trimmed.substring(0, _contentWidth)];
+  }
+
   static void _writeFooter(StringBuffer buffer) {
     buffer.writeln(_formatLeft('TERMS AND CONDITION'));
     buffer.writeln(_formatLeft('AMOUNT NOT REFUND'));
@@ -71,20 +89,13 @@ class ReceiptService {
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
       addressLine:
-          'T.10,3RD FLR,LN COMPLEX,OLD THARGUPET,Bangalore',
+          'T.10,3RD FLOOR,LN COMPLEX,OLD THARGUPET,Bangalore',
     );
-  }
-
-  static String _singleLineAddress(String address) {
-    final trimmed = address.trim();
-    if (trimmed.length <= _contentWidth) {
-      return trimmed;
-    }
-    return trimmed.substring(0, _contentWidth);
   }
 
   static String _itemHeader() {
     return '${_padRight('SNO', _snoW)}'
+        '${' ' * _gapW}'
         '${_padRight('GROUP', _partW)}'
         '${_padRight('RATE', _rateW)}'
         '${_padRight('QTY', _qtyW)}'
@@ -94,6 +105,7 @@ class ReceiptService {
   static String _itemLine(int sno, BillItem item) {
     final particular = item.particular.trim();
     return '${_padRight('$sno', _snoW)}'
+        '${' ' * _gapW}'
         '${_padRight(particular, _partW)}'
         '${_padRight(_rate(item.rate), _rateW)}'
         '${_padRight(_qty(item.qty), _qtyW)}'
@@ -101,12 +113,12 @@ class ReceiptService {
   }
 
   static String _itemGstLine(BillItem item) {
-    return 'CGST% ${_formatPct(item.cgstPct)}'
+    return 'CGST% ${_formatPct(item.cgstPct)} '
         'SGST% ${_formatPct(item.sgstPct)}';
   }
 
   static String _totalLine(double qty, double grandTotal) {
-    final left = _padRight('TOTAL', _snoW + _partW + _rateW);
+    final left = _padRight('TOTAL', _snoW + _gapW + _partW + _rateW);
     final qtyPart = _padRight(_qty(qty), _qtyW);
     final amountPart = _padLeft(_amount(grandTotal), _amountW);
     return '$left$qtyPart$amountPart';

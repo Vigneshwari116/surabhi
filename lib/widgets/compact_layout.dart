@@ -216,7 +216,7 @@ class CompactAbstractSummary extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: AppTextSizes.listSubtitle,
               fontWeight: FontWeight.w600,
               color: AppColors.mutedBlue,
               letterSpacing: 0.3,
@@ -226,7 +226,7 @@ class CompactAbstractSummary extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: AppTextSizes.fieldText,
               fontWeight: FontWeight.w700,
               color: AppColors.navy,
               height: 1.1,

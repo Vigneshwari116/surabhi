@@ -11,8 +11,20 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "assets/icon/app_icon.png"
 
 
+def _padded_square(src: Image.Image) -> Image.Image:
+    """Inset logo ~12% so small launcher sizes stay sharp."""
+    src = src.convert("RGBA")
+    w, h = src.size
+    inset = int(w * 0.12)
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    inner = src.resize((w - inset * 2, h - inset * 2), Image.Resampling.LANCZOS)
+    canvas.paste(inner, (inset, inset), inner)
+    return canvas
+
+
 def resize(src: Image.Image, size: int) -> Image.Image:
-    return src.resize((size, size), Image.Resampling.LANCZOS)
+    prepared = _padded_square(src)
+    return prepared.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def save_png(path: Path, img: Image.Image) -> None:

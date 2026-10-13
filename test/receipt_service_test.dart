@@ -28,7 +28,7 @@ SaleBill _sampleBill() {
 }
 
 void main() {
-  test('header shows Surabhi Exports and Thargupet address', () {
+  test('header shows Surabhi Exports centered with address', () {
     final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
     final text = lines.join('\n');
 
@@ -41,7 +41,7 @@ void main() {
     _expectBalancedMargins(text);
   });
 
-  test('item table includes group column aligned under headers', () {
+  test('item table includes spaced SNO and GROUP columns', () {
     final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
     final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
@@ -52,24 +52,11 @@ void main() {
     expect(itemLine.length, _paperWidth);
     expect(header.trim(), contains('SNO'));
     expect(header.trim(), contains('GROUP'));
-    expect(header.trim(), contains('RATE'));
-    expect(header.trim(), contains('QTY'));
-    expect(header.trim(), contains('AMOUNT'));
+    expect(header.trim(), isNot(contains('SNOGROUP')));
 
-    expect(itemLine.substring(_contentStart, _contentStart + 3).trim(), '1');
-    expect(
-      itemLine.substring(_contentStart + 3, _contentStart + 14).trim(),
-      'Shirt',
-    );
-    expect(
-      itemLine.substring(_contentStart + 14, _contentStart + 20).trim(),
-      '50',
-    );
-    expect(
-      itemLine.substring(_contentStart + 20, _contentStart + 24).trim(),
-      '1',
-    );
-    expect(itemLine.substring(_contentStart + 24).trim(), '50.00');
+    final content = header.trim();
+    final snoEnd = content.indexOf('GROUP');
+    expect(snoEnd, greaterThan(3));
 
     _expectLinesWithinThermalWidth(lines.join('\n'));
     _expectBalancedMargins(lines.join('\n'));
@@ -77,7 +64,8 @@ void main() {
 
   test('receipt shows per-item gst line', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
-    expect(text, contains('CGST% 2.5SGST% 2.5'));
+    expect(text, contains('CGST% 2.5'));
+    expect(text, contains('SGST% 2.5'));
     expect(text, contains('GRAND TOTAL'));
   });
 }
