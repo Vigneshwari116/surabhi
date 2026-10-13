@@ -28,6 +28,30 @@ class ReceiptService {
     return _buildOriginalFormat(bill, code).trimRight();
   }
 
+  /// True for shop header/footer lines that should be centered on thermal
+  /// (ESC/POS align center), matching bar/restaurant receipt style.
+  static bool isThermalCenteredLine(String rawLine) {
+    final trimmed = rawLine.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    if (trimmed.contains(businessName)) {
+      return true;
+    }
+    if (trimmed.startsWith('GSTIN:')) {
+      return true;
+    }
+    if (trimmed.contains('THANK YOU VISIT AGAIN')) {
+      return true;
+    }
+    if (trimmed.startsWith('-')) {
+      return false;
+    }
+    final leading = rawLine.length - rawLine.trimLeft().length;
+    final trailing = rawLine.length - rawLine.trimRight().length;
+    return leading >= _margin && trailing >= _margin;
+  }
+
   /// Original thermal layout — dashed separators, per-item CGST/SGST lines.
   static String _buildOriginalFormat(SaleBill bill, String locationCode) {
     final buffer = StringBuffer();

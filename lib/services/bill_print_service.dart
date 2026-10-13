@@ -182,18 +182,7 @@ class BillPrintService {
   }
 
   static bool _isCenteredReceiptLine(String raw, String trimmed) {
-    if (trimmed == ReceiptService.businessName) {
-      return true;
-    }
-    if (trimmed.startsWith('GSTIN:')) {
-      return true;
-    }
-    if (trimmed.contains('THANK YOU VISIT AGAIN')) {
-      return true;
-    }
-    final leading = raw.length - raw.trimLeft().length;
-    final trailing = raw.length - raw.trimRight().length;
-    return leading >= 6 && trailing >= 6;
+    return ReceiptService.isThermalCenteredLine(raw);
   }
 
   static String _normalizedReceiptText(String text) {
