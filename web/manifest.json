@@ -1,11 +1,11 @@
 {
-    "name": "sales",
-    "short_name": "sales",
+    "name": "Surabhi Exports",
+    "short_name": "Surabhi",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#D1001C",
+    "theme_color": "#D1001C",
+    "description": "Surabhi Exports offline sales billing.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
