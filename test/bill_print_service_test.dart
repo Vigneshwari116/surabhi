@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
 SaleBill _sampleBill() {
@@ -63,7 +64,8 @@ void main() {
     expect(footerIndex, greaterThan(grandTotalIndex));
   });
 
-  test('thermal pdf uses 66mm page width and dynamic height', () async {
+  test('thermal pdf uses 66mm page width, computed font, and dynamic height',
+      () async {
     final bill = _sampleBill();
     final lineCount = ReceiptService.buildReceiptLines(bill).length;
     final bytes = await BillPrintService.buildPdfBytes(bill);
@@ -82,6 +84,18 @@ void main() {
         BillPrintService.thermalPdfPageWidthMm * PdfPageFormat.mm;
     expect(pageWidthPt, closeTo(pageFormat.width, 1.0));
     expect(pageWidthPt, closeTo(expectedWidthPt, 1.5));
+    expect(
+      pageFormat.marginLeft,
+      closeTo(ReceiptLayout.marginLeftMm * PdfPageFormat.mm, 0.5),
+    );
+    expect(
+      pageFormat.marginRight,
+      closeTo(ReceiptLayout.marginRightMm * PdfPageFormat.mm, 0.5),
+    );
+    expect(
+      BillPrintService.thermalFontSizePt(),
+      ReceiptLayout.bodyFontSizePt(),
+    );
 
     final expectedHeightMm = lineCount * BillPrintService.thermalLineSpacingMm +
         BillPrintService.thermalPdfMarginTopMm +

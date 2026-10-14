@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
 const _cols = ReceiptService.thermalContentColumns;
-const _amountStart = 3 + 8 + 6 + 4;
+const _amountStart = 3 + 1 + 8 + 6 + 4;
 
 SaleBill _sampleBill() {
   return SaleBill(
@@ -45,27 +46,33 @@ void main() {
     _expectCentered(gstinLine);
   });
 
-  test('item table includes SNO and GROUP columns on each row', () {
+  test('item table includes spaced SNO and GROUP columns', () {
     final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
-      (line) => line.trimLeft().startsWith('1') && line.contains('50.00'),
+      (line) => line.contains('SHIRT') && line.contains('50.00'),
     );
 
     expect(header.length, _cols);
     expect(itemLine.length, _cols);
     expect(header.substring(0, 3), 'SNO');
-    expect(header.substring(3, 11).trim(), 'GROUP');
-    expect(itemLine.substring(3, 11).trim(), 'Shirt');
+    expect(header.substring(3, 4), ' ');
+    expect(header.substring(4, 12).trim(), 'GROUP');
+    expect(itemLine.substring(4, 12).trim(), 'SHIRT');
 
     _expectLinesWithinWidth(lines);
   });
 
-  test('receipt shows per-item gst line with separated cgst and sgst', () {
+  test('receipt prints gst line once with two decimals on amounts', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
     expect(text, contains('CGST% 2.5  SGST% 2.5'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, contains('EXCHANGE ONLY 3 DAYS'));
+    expect(text, contains('50.00'));
+    expect(text, contains('47.62'));
+
+    final gstMatches = 'CGST% 2.5'.allMatches(text).length;
+    expect(gstMatches, 1);
   });
 
   test('separator lines are exactly content width', () {
@@ -75,6 +82,41 @@ void main() {
     for (final line in dashes) {
       expect(line.length, _cols);
     }
+  });
+
+  test('group names are uppercase and truncated to eight characters', () {
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 13),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'longnameitem', qty: 1, rate: 10),
+      ],
+      totalQty: 1,
+      totalAmount: 9.52,
+      totalCgst: 0.24,
+      totalSgst: 0.24,
+      totalIgst: 0,
+      grandTotal: 10,
+    );
+
+    final text = ReceiptService.buildReceiptText(bill);
+    expect(text, contains('LONGNAME'));
+    expect(text, isNot(contains('longnameitem')));
+  });
+
+  test('computed pdf font fits 58mm content width', () {
+    final fontSize = ReceiptLayout.bodyFontSizePt();
+    expect(fontSize, lessThanOrEqualTo(8.3));
+    expect(fontSize, greaterThan(7.5));
+
+    final charWidthMm =
+        fontSize * ReceiptLayout.courierBoldCharWidthFactor * (25.4 / 72);
+    final totalMm = charWidthMm * ReceiptLayout.columnCount;
+    expect(totalMm, lessThanOrEqualTo(ReceiptLayout.contentWidthMm));
   });
 
   test('amount column is right-aligned for large values', () {
@@ -121,7 +163,7 @@ void main() {
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final item = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
-    expect(item.substring(3, 11), '        ');
+    expect(item.substring(4, 12), '        ');
     _expectLinesWithinWidth(lines);
   });
 

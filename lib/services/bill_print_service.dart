@@ -8,21 +8,20 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
 class BillPrintService {
   /// Thermal PDF tuning (3-inch / RP3200 roll) — adjust here only.
-  static const double thermalPdfPageWidthMm = 66.0;
-  static const double thermalPdfMarginRightMm = 6.0;
+  static const double thermalPdfPageWidthMm = ReceiptLayout.pageWidthMm;
+  static const double thermalPdfMarginRightMm = ReceiptLayout.marginRightMm;
 
-  static const double thermalPdfMarginLeftMm = 2.0;
+  static const double thermalPdfMarginLeftMm = ReceiptLayout.marginLeftMm;
   static const double thermalPdfMarginTopMm = 2.5;
   static const double thermalPdfMarginBottomMm = 4.0;
-  static const double thermalPrintableWidthMm = thermalPdfPageWidthMm -
-      thermalPdfMarginLeftMm -
-      thermalPdfMarginRightMm;
+  static const double thermalPrintableWidthMm = ReceiptLayout.contentWidthMm;
 
-  static const double thermalFontSizePt = 9.0;
+  static double thermalFontSizePt() => ReceiptLayout.bodyFontSizePt();
   static const double thermalLineSpacingMm = 4.25;
 
   static Future<String> saveReceiptToDesktop(SaleBill bill) async {
@@ -188,7 +187,8 @@ class BillPrintService {
     List<String> lines, {
     required PrinterType type,
   }) {
-    final fontSize = type == PrinterType.thermal ? thermalFontSizePt : 7.0;
+    final fontSize =
+        type == PrinterType.thermal ? thermalFontSizePt() : 7.0;
     final lineHeightMm =
         type == PrinterType.thermal ? thermalLineSpacingMm : 4.25;
     const lineHeightFactor = 1.0;

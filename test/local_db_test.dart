@@ -530,4 +530,17 @@ void main() {
       await inspection.close();
     });
   });
+
+  test('groupSummaryFromItemsJson lists distinct groups in order', () {
+    final items = jsonEncode([
+      {'particular': 'shirt', 'qty': 1, 'rate': 100},
+      {'particular': 'Shirt', 'qty': 2, 'rate': 200},
+      {'particular': 'pant', 'qty': 1, 'rate': 300},
+    ]);
+
+    expect(
+      LocalDb.groupSummaryFromItemsJson(items),
+      'SHIRT, PANT',
+    );
+  });
 }

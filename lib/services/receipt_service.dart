@@ -2,25 +2,26 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 
 class ReceiptService {
   static const String businessName = businessDisplayName;
   static const String gstin = '29ACDPJ2452J1ZK';
 
   /// Monospace columns for bill text (~66 mm PDF printable area).
-  static const int thermalContentColumns = 32;
+  static const int thermalContentColumns = ReceiptLayout.columnCount;
 
   static const int _contentWidth = thermalContentColumns;
 
   /// Bill no + date line uses 30 cols (2 spare vs printable width).
   static const int _billDateLineMaxChars = 30;
 
-  static const int _snoW = 3;
-  static const int _groupW = 8;
-  static const int _rateW = 6;
-  static const int _qtyW = 4;
-  static const int _amountW =
-      _contentWidth - _snoW - _groupW - _rateW - _qtyW;
+  static const int _snoW = ReceiptLayout.snoWidth;
+  static const int _gapW = ReceiptLayout.snoGroupGap;
+  static const int _groupW = ReceiptLayout.groupWidth;
+  static const int _rateW = ReceiptLayout.rateWidth;
+  static const int _qtyW = ReceiptLayout.qtyWidth;
+  static const int _amountW = ReceiptLayout.amountWidth;
   static const int _labelW = _contentWidth - _amountW;
 
   static String buildReceiptText(SaleBill bill) {
@@ -62,7 +63,6 @@ class ReceiptService {
     return false;
   }
 
-  /// Original thermal layout — dashed separators, per-item CGST/SGST lines.
   static List<String> _buildOriginalFormat(
     SaleBill bill,
     String locationCode,
@@ -89,13 +89,21 @@ class ReceiptService {
       final item = bill.items[index];
       lines.add(_line(_itemLine(item, index + 1)));
       lines.add(separator);
-      lines.addAll(_itemGstLines(item));
+    }
+
+    for (final gstLine in _distinctGstLines(bill.items)) {
+      lines.add(_line(gstLine));
+    }
+    if (bill.items.isNotEmpty) {
       lines.add(separator);
     }
 
-    lines.add(_line(_totalLine(bill.totalQty, bill.grandTotal)));
+    lines.add(_line(_totalLine(bill.totalQty, bill.totalAmount)));
     lines.add(_line(_rightAmountLine('CGST', bill.totalCgst)));
     lines.add(_line(_rightAmountLine('SGST', bill.totalSgst)));
+    if (bill.totalIgst > 0) {
+      lines.add(_line(_rightAmountLine('IGST', bill.totalIgst)));
+    }
     lines.add(separator);
     lines.add(_line(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
     lines.add(separator);
@@ -107,6 +115,19 @@ class ReceiptService {
   }
 
   static String _separatorLine() => '-' * _contentWidth;
+
+  static List<String> _distinctGstLines(List<BillItem> items) {
+    final seen = <String>{};
+    final lines = <String>[];
+    for (final item in items) {
+      final key = '${item.cgstPct}|${item.sgstPct}|${item.igstPct}';
+      if (!seen.add(key)) {
+        continue;
+      }
+      lines.add(_itemGstLine(item));
+    }
+    return lines;
+  }
 
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
@@ -162,6 +183,7 @@ class ReceiptService {
 
   static String _itemHeader() {
     return '${_padRight('SNO', _snoW)}'
+        '${' ' * _gapW}'
         '${_padRight('GROUP', _groupW)}'
         '${_padRight('RATE', _rateW)}'
         '${_padRight('QTY', _qtyW)}'
@@ -169,28 +191,42 @@ class ReceiptService {
   }
 
   static String _itemLine(BillItem item, int serialNo) {
-    final group = item.particular.trim();
+    final group = _groupLabel(item.particular);
     return '${_padRight('$serialNo', _snoW)}'
+        '${' ' * _gapW}'
         '${_padRight(group, _groupW)}'
         '${_padRight(_rate(item.rate), _rateW)}'
         '${_padRight(_qty(item.qty), _qtyW)}'
-        '${_padLeft(_amount(item.grossAmt), _amountW)}';
+        '${_padLeft(_amount(item.amount), _amountW)}';
   }
 
-  static List<String> _itemGstLines(BillItem item) {
-    final cgstPart = 'CGST% ${_formatPct(item.cgstPct)}';
-    final sgstPart = 'SGST% ${_formatPct(item.sgstPct)}';
-    final combined = '$cgstPart  $sgstPart';
-    if (combined.length <= _contentWidth) {
-      return [_line(combined)];
+  static String _groupLabel(String particular) {
+    final trimmed = particular.trim();
+    if (trimmed.isEmpty) {
+      return '';
     }
-    return [_line(cgstPart), _line(sgstPart)];
+    final upper = trimmed.toUpperCase();
+    if (upper.length <= _groupW) {
+      return upper;
+    }
+    return upper.substring(0, _groupW);
   }
 
-  static String _totalLine(double qty, double grandTotal) {
-    final left = _padRight('TOTAL', _snoW + _groupW + _rateW);
+  static String _itemGstLine(BillItem item) {
+    final parts = <String>[
+      'CGST% ${_formatPct(item.cgstPct)}',
+      'SGST% ${_formatPct(item.sgstPct)}',
+    ];
+    if (item.igstPct > 0) {
+      parts.add('IGST% ${_formatPct(item.igstPct)}');
+    }
+    return parts.join('  ');
+  }
+
+  static String _totalLine(double qty, double taxableTotal) {
+    final left = _padRight('TOTAL', _snoW + _gapW + _groupW + _rateW);
     final qtyPart = _padRight(_qty(qty), _qtyW);
-    final amountPart = _padLeft(_amount(grandTotal), _amountW);
+    final amountPart = _padLeft(_amount(taxableTotal), _amountW);
     return '$left$qtyPart$amountPart';
   }
 
@@ -275,9 +311,6 @@ class ReceiptService {
   }
 
   static String _rate(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toInt().toString();
-    }
     return value.toStringAsFixed(2);
   }
 

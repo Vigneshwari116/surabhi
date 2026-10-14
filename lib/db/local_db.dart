@@ -251,7 +251,7 @@ class LocalDb {
       'bills',
       where: whereParts.join(' AND '),
       whereArgs: whereArgs,
-      orderBy: 'bill_no DESC',
+      orderBy: 'bill_date ASC, bill_no ASC',
     );
 
     return rows
@@ -275,10 +275,19 @@ class LocalDb {
 
   static String groupSummaryFromItemsJson(String? itemsJson) {
     final items = parseBillItems(itemsJson ?? '[]');
-    return items
-        .map((item) => item.particular.trim())
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final seen = <String>{};
+    final names = <String>[];
+    for (final item in items) {
+      final name = item.particular.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      final key = name.toLowerCase();
+      if (seen.add(key)) {
+        names.add(name.toUpperCase());
+      }
+    }
+    return names.join(', ');
   }
 
   // ---------------------------------------------------------------------------
