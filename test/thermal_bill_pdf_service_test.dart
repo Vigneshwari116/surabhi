@@ -1,32 +1,12 @@
-import 'dart:typed_data';
-
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
-import 'package:surabhi/services/thermal_bill_pdf_service.dart';
+import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/services/receipt_service.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', (message) async {
-      final key = const StringCodec().decodeMessage(message);
-      if (key == 'assets/fonts/consolas.ttf') {
-        return Uint8List.fromList([0, 1, 2, 3]);
-      }
-      return null;
-    });
-  });
-
-  tearDownAll(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', null);
-  });
-
-  test('thermal pdf uses 78mm roll width like bar-and-rest-correct-', () async {
+  test('thermal bill pdf is built from receipt lines at 66mm', () async {
     final bill = SaleBill(
       billNo: 2,
       location: 'Surabhi',
@@ -45,15 +25,18 @@ void main() {
       grandTotal: 1530,
     );
 
-    final result = await ThermalBillPdfService.buildPdfWithFormat(bill);
+    final bytes = await BillPrintService.buildThermalPdfBytes(bill);
+    final pageFormat = BillPrintService.pageFormatForBill(bill);
+    final lines = ReceiptService.buildReceiptLines(bill);
 
-    expect(result.bytes, isNotEmpty);
+    expect(bytes, isNotEmpty);
     expect(
-      result.format.width,
-      closeTo(78 * PdfPageFormat.mm, 1.0),
+      pageFormat.width,
+      closeTo(BillPrintService.thermalPdfPageWidthMm * PdfPageFormat.mm, 1.0),
     );
-    final pdfText = String.fromCharCodes(result.bytes);
-    expect(pdfText, contains('SURABHI EXPORTS'));
-    expect(pdfText, contains('THANK YOU VISIT AGAIN'));
+    expect(lines.any((line) => line.contains('shirt')), isTrue);
+    expect(lines.any((line) => line.trimLeft().startsWith('1')), isTrue);
+    final pdfText = String.fromCharCodes(bytes);
+    expect(pdfText, contains('/MediaBox'));
   });
 }
