@@ -105,7 +105,7 @@ class LedgerPdfService {
               'CARD/UPI',
               'TOTAL',
               'GST',
-              'GRAND TOTAL',
+              'GRAND\nTOTAL',
             ],
             data: [
               for (final entry in entries)

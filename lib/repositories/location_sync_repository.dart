@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 
 /// Reads per-location last successful pull/sync timestamps for admin dashboard.
@@ -38,8 +39,7 @@ class LocationSyncRepository {
     required String locationCode,
     required String locationName,
   }) async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
     if (!await File(path).exists()) {
       return null;
     }

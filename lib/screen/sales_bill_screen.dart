@@ -23,6 +23,7 @@ import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/gst_config_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/money_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 class SalesBillScreen extends StatefulWidget {
@@ -66,11 +67,18 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _entryBoxWidth = 92;
   static const double _entryBoxHeight = 44;
   static const double _entryLabelSize = 18.0;
-  static const int _flexSno = 40;
-  static const int _flexGroup = 85;
-  static const int _flexRate = 58;
-  static const int _flexQty = 50;
-  static const int _flexAmount = 72;
+  static const int _flexSno = 48;
+  static const int _flexGroup = 100;
+  static const int _flexRate = 72;
+  static const int _flexQty = 56;
+  static const int _flexAmount = 88;
+  static const int _flexLineTotal = 100;
+  static const int _flexCgst = 80;
+  static const int _flexSgst = 80;
+  static const int _flexIgst = 72;
+  static const double _tableRowHeight = 40;
+  static const double _tableHeaderFontSize = 15;
+  static const double _tableCellFontSize = 15;
   static const double _deleteColWidth = 34;
   static const double _desktopBreakpoint = 900;
   static const double _sidebarBreakpoint = 700;
@@ -1022,11 +1030,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // FORMAT
   // ============================================================
 
-  String _format(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toStringAsFixed(0);
-    }
+  String _formatAmount(double value) => formatMoneyAmount(value);
 
+  String _formatQtyOrPct(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
     return value.toStringAsFixed(2);
   }
 
@@ -1278,9 +1287,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildTodaySalesSummary() {
     return CompactAbstractSummary(
-      amountValue: _format(_todayAmount),
-      gstValue: _format(_todayGst),
-      grandTotalValue: _format(_todayGrandTotal),
+      amountValue: _formatAmount(_todayAmount),
+      gstValue: _formatAmount(_todayGst),
+      grandTotalValue: _formatAmount(_todayGrandTotal),
       grandTotalLabel: 'Total sales',
       cardWidth: 130,
     );
@@ -1836,7 +1845,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   void _updateAmountDisplay() {
-    final text = _format(_currentAmount);
+    final text = _formatAmount(_currentAmount);
     if (_amountController.text != text) {
       _amountController.text = text;
     }
@@ -1933,7 +1942,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Text(
-          'Group',
+          'GROUP',
           style: TextStyle(
             fontSize: _entryLabelSize,
             fontWeight: FontWeight.w700,
@@ -2019,7 +2028,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             _buildStackedGroupDropdown(),
             const SizedBox(width: _entryColumnGap),
             _buildStackedEntryField(
-              label: 'Rate',
+              label: 'RATE',
               controller: _rateController,
               focusNode: _rateFocus,
               onChanged: _rateChanged,
@@ -2030,7 +2039,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             ),
             const SizedBox(width: _entryColumnGap),
             _buildStackedEntryField(
-              label: 'Qty',
+              label: 'QTY',
               controller: _qtyController,
               focusNode: _qtyFocus,
               onChanged: _qtyChanged,
@@ -2041,7 +2050,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             ),
             const SizedBox(width: _entryColumnGap),
             _buildStackedEntryField(
-              label: 'Amount',
+              label: 'AMOUNT',
               controller: _amountController,
               readOnly: true,
             ),
@@ -2064,7 +2073,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           children: [
             _buildStackedGroupDropdown(),
             _buildStackedEntryField(
-              label: 'Rate',
+              label: 'RATE',
               controller: _rateController,
               focusNode: _rateFocus,
               onChanged: _rateChanged,
@@ -2074,7 +2083,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               fieldKey: const Key('bill_rate_field'),
             ),
             _buildStackedEntryField(
-              label: 'Qty',
+              label: 'QTY',
               controller: _qtyController,
               focusNode: _qtyFocus,
               onChanged: _qtyChanged,
@@ -2084,7 +2093,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               fieldKey: const Key('bill_qty_field'),
             ),
             _buildStackedEntryField(
-              label: 'Amount',
+              label: 'AMOUNT',
               controller: _amountController,
               readOnly: true,
             ),
@@ -2122,7 +2131,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // S.NO | RATE | QTY | AMOUNT | Total | CGST % | SGST % | IGST | X
   // ============================================================
 
-  double _tableWidth(bool showTax) => (showTax ? 624 : 480) + 34;
+  double _tableWidth(bool showTax) =>
+      (showTax ? 820 : 620).toDouble() + _deleteColWidth;
 
   Widget _buildItemTableSection({bool mobile = false}) {
     final showTax = _items.isNotEmpty;
@@ -2200,20 +2210,20 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildTableHeader(bool showTax) {
     return Container(
-      height: 32,
+      height: _tableRowHeight,
       color: AppColors.tableHeader,
       child: Row(
         children: [
-          _tableHeaderCell('S.no', 40),
-          _tableHeaderCell('Group', 85),
-          _tableHeaderCell('RATE', 58),
-          _tableHeaderCell('Qty', 50),
-          _tableHeaderCell('AMOUNT', 72),
-          _tableHeaderCell('Total', 95, last: !showTax),
+          _tableHeaderCell('S.NO', _flexSno),
+          _tableHeaderCell('GROUP', _flexGroup),
+          _tableHeaderCell('RATE', _flexRate, alignRight: true),
+          _tableHeaderCell('QTY', _flexQty, alignRight: true),
+          _tableHeaderCell('AMOUNT', _flexAmount, alignRight: true),
+          _tableHeaderCell('TOTAL', _flexLineTotal, alignRight: true, last: !showTax),
           if (showTax) ...[
-            _tableHeaderCell('CGST %', 70),
-            _tableHeaderCell('SGST %', 70),
-            _tableHeaderCell('IGST', 65),
+            _tableHeaderCell('CGST %', _flexCgst, alignRight: true),
+            _tableHeaderCell('SGST %', _flexSgst, alignRight: true),
+            _tableHeaderCell('IGST', _flexIgst, alignRight: true),
           ],
           _tableDeleteHeaderCell(),
         ],
@@ -2221,15 +2231,17 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
-  Widget _tableHeaderCell(String text, int flex, {bool last = false}) {
+  Widget _tableHeaderCell(
+    String text,
+    int flex, {
+    bool last = false,
+    bool alignRight = false,
+  }) {
     return Expanded(
       flex: flex,
       child: Container(
-        height: 32,
-        padding: EdgeInsets.only(
-          left: text == 'RATE' ? 6 : 2,
-          right: text == 'Group' ? 8 : 2,
-        ),
+        height: _tableRowHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           border: Border(
             right: last
@@ -2237,16 +2249,18 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 : BorderSide(color: AppColors.border, width: 0.6),
           ),
         ),
-        alignment: Alignment.center,
+        alignment:
+            alignRight ? Alignment.centerRight : Alignment.centerLeft,
         child: Text(
           text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          softWrap: true,
+          overflow: TextOverflow.visible,
           style: const TextStyle(
-            fontSize: AppTextSizes.tableHeaderText,
+            fontSize: _tableHeaderFontSize,
             fontWeight: FontWeight.bold,
-            height: 1,
-            color: Colors.black,
+            height: 1.1,
+            color: Color(0xFF111111),
           ),
         ),
       ),
@@ -2255,9 +2269,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _tableDeleteHeaderCell() {
     return SizedBox(
-      width: 34,
+      width: _deleteColWidth,
       child: Container(
-        height: 32,
+        height: _tableRowHeight,
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: AppColors.border, width: 0.6),
@@ -2368,20 +2382,40 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         });
       },
       child: Container(
-        height: 34,
+        height: _tableRowHeight,
         color: selected ? const Color(0xFFFFE5A0) : AppColors.background,
         child: Row(
           children: [
-            _tableDataCell('${index + 1}', 40),
-            _tableDataCell(item.particular, 85),
-            _tableDataCell(_format(item.rate), 58),
-            _tableDataCell(_format(item.qty), 50),
-            _tableDataCell(_format(item.amount), 72),
-            _tableDataCell(_format(item.grossAmt), 95, last: !showTax),
+            _tableDataCell('${index + 1}', _flexSno),
+            _tableDataCell(
+              item.particular.trim().toUpperCase(),
+              _flexGroup,
+            ),
+            _tableDataCell(_formatAmount(item.rate), _flexRate, alignRight: true),
+            _tableDataCell(_formatQtyOrPct(item.qty), _flexQty, alignRight: true),
+            _tableDataCell(_formatAmount(item.amount), _flexAmount, alignRight: true),
+            _tableDataCell(
+              _formatAmount(item.grossAmt),
+              _flexLineTotal,
+              alignRight: true,
+              last: !showTax,
+            ),
             if (showTax) ...[
-              _tableDataCell(_format(item.cgstPct), 70),
-              _tableDataCell(_format(item.sgstPct), 70),
-              _tableDataCell(_format(item.igst), 65),
+              _tableDataCell(
+                _formatQtyOrPct(item.cgstPct),
+                _flexCgst,
+                alignRight: true,
+              ),
+              _tableDataCell(
+                _formatQtyOrPct(item.sgstPct),
+                _flexSgst,
+                alignRight: true,
+              ),
+              _tableDataCell(
+                _formatAmount(item.igst),
+                _flexIgst,
+                alignRight: true,
+              ),
             ],
             _buildDeleteCell(index),
           ],
@@ -2392,9 +2426,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildDeleteCell(int index) {
     return SizedBox(
-      width: 34,
+      width: _deleteColWidth,
       child: Container(
-        height: 34,
+        height: _tableRowHeight,
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: AppColors.border, width: 0.6),
@@ -2415,11 +2449,17 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // TABLE DATA CELL
   // ============================================================
 
-  Widget _tableDataCell(String text, int flex, {bool last = false}) {
+  Widget _tableDataCell(
+    String text,
+    int flex, {
+    bool last = false,
+    bool alignRight = false,
+  }) {
     return Expanded(
       flex: flex,
       child: Container(
-        height: 34,
+        height: _tableRowHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           border: Border(
             right: last
@@ -2428,12 +2468,18 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             bottom: BorderSide(color: AppColors.border, width: 0.6),
           ),
         ),
-        alignment: Alignment.center,
+        alignment:
+            alignRight ? Alignment.centerRight : Alignment.centerLeft,
         child: Text(
           text,
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 10, height: 1),
+          overflow: TextOverflow.visible,
+          style: const TextStyle(
+            fontSize: _tableCellFontSize,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            color: Color(0xFF111111),
+          ),
         ),
       ),
     );
@@ -2461,7 +2507,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           Row(
             children: [
               const Text(
-                'Grand Total',
+                'GRAND TOTAL',
                 style: TextStyle(
                   fontSize: AppTextSizes.sectionHeader,
                   fontWeight: FontWeight.w700,
@@ -2470,7 +2516,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ),
               Expanded(
                 child: Text(
-                  _format(_grandTotal),
+                  _formatAmount(_grandTotal),
                   textAlign: TextAlign.right,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

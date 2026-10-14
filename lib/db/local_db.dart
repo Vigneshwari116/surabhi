@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/summary_update_service.dart';
@@ -251,7 +252,7 @@ class LocalDb {
       'bills',
       where: whereParts.join(' AND '),
       whereArgs: whereArgs,
-      orderBy: 'bill_no DESC',
+      orderBy: 'bill_date ASC, bill_no ASC',
     );
 
     return rows
@@ -275,10 +276,19 @@ class LocalDb {
 
   static String groupSummaryFromItemsJson(String? itemsJson) {
     final items = parseBillItems(itemsJson ?? '[]');
-    return items
-        .map((item) => item.particular.trim())
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final seen = <String>{};
+    final names = <String>[];
+    for (final item in items) {
+      final name = item.particular.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      final key = name.toLowerCase();
+      if (seen.add(key)) {
+        names.add(name.toUpperCase());
+      }
+    }
+    return names.join(', ');
   }
 
   // ---------------------------------------------------------------------------
@@ -379,6 +389,14 @@ class LocalDb {
           limit: 1,
         );
 
+        if (existingRows.isNotEmpty &&
+            _shouldSkipPulledBillResurrection(
+              existingRow: existingRows.first,
+              pulled: bill,
+            )) {
+          continue;
+        }
+
         SaleBill? previous;
         if (existingRows.isNotEmpty) {
           previous = _rowToStoredBill(existingRows.first)?.bill;
@@ -428,6 +446,29 @@ class LocalDb {
     }
 
     return applied;
+  }
+
+  /// Prevents server pulls from undoing a local soft-delete (tombstone).
+  @visibleForTesting
+  static bool shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    return _shouldSkipPulledBillResurrection(
+      existingRow: existingRow,
+      pulled: pulled,
+    );
+  }
+
+  static bool _shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    if (pulled.deleted) {
+      return false;
+    }
+    final locallyDeleted = (existingRow['deleted'] as int? ?? 0) == 1;
+    return locallyDeleted;
   }
 
   /// Soft-deletes a bill (row kept for audit; hidden from ledger).
@@ -735,8 +776,7 @@ class LocalDb {
   // ---------------------------------------------------------------------------
 
   Future<Database> _initDb() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${AppConfig.locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
 
     return openDatabase(
       path,
@@ -1002,19 +1042,10 @@ class LocalDb {
 
   Future<void> _ensureLocationMeta(String location) async {
     final db = await database;
-    final rows = await db.query(
-      'location_meta',
-      where: 'location = ?',
-      whereArgs: [location],
-      limit: 1,
+    await db.rawInsert(
+      'INSERT OR IGNORE INTO location_meta (location, next_bill_no) VALUES (?, 1)',
+      [location],
     );
-
-    if (rows.isEmpty) {
-      await db.insert('location_meta', {
-        'location': location,
-        'next_bill_no': 1,
-      });
-    }
   }
 
   Future<void> _advanceNextBillNo(String location, int usedBillNo) async {
