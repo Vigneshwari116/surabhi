@@ -492,31 +492,19 @@ class LocationDatabase {
         );
     final nextBillNo = maxBillNo + 1;
 
-    final existing = await txn.query(
-      'location_meta',
-      where: 'location = ?',
-      whereArgs: [locationName],
-      limit: 1,
+    await txn.rawInsert(
+      'INSERT OR IGNORE INTO location_meta (location, next_bill_no) VALUES (?, ?)',
+      [locationName, nextBillNo],
     );
 
-    if (existing.isEmpty) {
-      await txn.insert('location_meta', {
-        'location': locationName,
-        'next_bill_no': nextBillNo,
-      });
-      return;
-    }
-
-    final currentNext =
-        (existing.first['next_bill_no'] as num?)?.toInt() ?? 1;
-    if (nextBillNo > currentNext) {
-      await txn.update(
-        'location_meta',
-        {'next_bill_no': nextBillNo},
-        where: 'location = ?',
-        whereArgs: [locationName],
-      );
-    }
+    await txn.rawUpdate(
+      '''
+      UPDATE location_meta
+      SET next_bill_no = MAX(next_bill_no, ?)
+      WHERE location = ?
+      ''',
+      [nextBillNo, locationName],
+    );
   }
 
   static Future<Database> _openWritableDatabase(String path) async {

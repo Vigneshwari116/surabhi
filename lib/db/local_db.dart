@@ -1042,19 +1042,10 @@ class LocalDb {
 
   Future<void> _ensureLocationMeta(String location) async {
     final db = await database;
-    final rows = await db.query(
-      'location_meta',
-      where: 'location = ?',
-      whereArgs: [location],
-      limit: 1,
+    await db.rawInsert(
+      'INSERT OR IGNORE INTO location_meta (location, next_bill_no) VALUES (?, 1)',
+      [location],
     );
-
-    if (rows.isEmpty) {
-      await db.insert('location_meta', {
-        'location': location,
-        'next_bill_no': 1,
-      });
-    }
   }
 
   Future<void> _advanceNextBillNo(String location, int usedBillNo) async {

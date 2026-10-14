@@ -153,6 +153,43 @@ void main() {
       expect(parsed.first.rate, 75.5);
     });
 
+    test('parallel location_meta initialization is idempotent and preserves sequence',
+        () async {
+      final db = LocalDb.instance;
+      await db.initialize();
+
+      await Future.wait(
+        List.generate(
+          100,
+          (_) => db.getNextBillNumber(_testLocationName),
+        ),
+      );
+
+      final sqlite = await db.database;
+      final rowCount = Sqflite.firstIntValue(
+        await sqlite.rawQuery(
+          'SELECT COUNT(*) FROM location_meta WHERE location = ?',
+          [_testLocationName],
+        ),
+      );
+      expect(rowCount, 1);
+      expect(await db.getNextBillNumber(_testLocationName), 1);
+
+      await sqlite.update(
+        'location_meta',
+        {'next_bill_no': 99},
+        where: 'location = ?',
+        whereArgs: [_testLocationName],
+      );
+
+      await Future.wait([
+        for (var i = 0; i < 50; i++) db.getNextBillNumber(_testLocationName),
+        for (var i = 0; i < 50; i++) db.getLastPullAt(_testLocationName),
+      ]);
+
+      expect(await db.getNextBillNumber(_testLocationName), 99);
+    });
+
     test('getNextBillNumber advances after insertBill', () async {
       final db = LocalDb.instance;
       await db.initialize();
