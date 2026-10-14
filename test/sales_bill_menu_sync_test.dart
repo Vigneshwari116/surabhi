@@ -32,7 +32,7 @@ const _testLocationCode = 'main';
 
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
-  final file = File('${dir.path}/${_testLocationCode}_sales.db');
+  final file = File('${dir.path}/main_sales.db');
   if (await file.exists()) {
     await file.delete();
   }

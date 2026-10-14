@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
@@ -117,8 +118,7 @@ class AbstractRepository {
       }
     }
 
-    final supportDir = await getApplicationSupportDirectory();
-    final dbPath = join(supportDir.path, '${locationCode}_sales.db');
+    final dbPath = await SalesDatabase.salesDbPath();
     if (await File(dbPath).exists()) {
       return _readBillsFromLocationFile(
         locationCode: locationCode,
@@ -133,8 +133,7 @@ class AbstractRepository {
     required String locationCode,
     required String locationName,
   }) async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
     final file = File(path);
     if (!await file.exists()) {
       return const [];

@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/summary_update_service.dart';
@@ -388,6 +389,14 @@ class LocalDb {
           limit: 1,
         );
 
+        if (existingRows.isNotEmpty &&
+            _shouldSkipPulledBillResurrection(
+              existingRow: existingRows.first,
+              pulled: bill,
+            )) {
+          continue;
+        }
+
         SaleBill? previous;
         if (existingRows.isNotEmpty) {
           previous = _rowToStoredBill(existingRows.first)?.bill;
@@ -437,6 +446,29 @@ class LocalDb {
     }
 
     return applied;
+  }
+
+  /// Prevents server pulls from undoing a local soft-delete (tombstone).
+  @visibleForTesting
+  static bool shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    return _shouldSkipPulledBillResurrection(
+      existingRow: existingRow,
+      pulled: pulled,
+    );
+  }
+
+  static bool _shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    if (pulled.deleted) {
+      return false;
+    }
+    final locallyDeleted = (existingRow['deleted'] as int? ?? 0) == 1;
+    return locallyDeleted;
   }
 
   /// Soft-deletes a bill (row kept for audit; hidden from ledger).
@@ -744,8 +776,7 @@ class LocalDb {
   // ---------------------------------------------------------------------------
 
   Future<Database> _initDb() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${AppConfig.locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
 
     return openDatabase(
       path,

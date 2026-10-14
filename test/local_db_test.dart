@@ -11,6 +11,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -31,7 +32,7 @@ const _testLocationName = 'Surabhi';
 
 Future<String> _testDbPath() async {
   final dir = await getApplicationSupportDirectory();
-  return p.join(dir.path, '${_testLocationCode}_sales.db');
+  return p.join(dir.path, SalesDatabase.salesDbFileName);
 }
 
 Future<void> _deleteTestDb() async {
@@ -342,6 +343,29 @@ void main() {
       );
       expect(stored!.bill.customerName, 'Server Version');
       expect(stored.syncStatus, 'synced');
+    });
+
+    test('applyPulledBills does not resurrect locally soft-deleted bills', () async {
+      final db = LocalDb.instance;
+      await db.initialize();
+
+      final localId = await db.insertBill(
+        SaleBill.fromJson(_sampleBillJson()),
+        syncStatus: 'synced',
+      );
+      await db.markBillDeleted(localId);
+
+      final pulled = SaleBill.fromJson({
+        ..._sampleBillJson(),
+        'customerName': 'Server Resurrected',
+      });
+
+      final applied = await db.applyPulledBills([pulled]);
+
+      expect(applied, 0);
+
+      final entries = await db.getLedgerEntries(_testLocationName);
+      expect(entries, isEmpty);
     });
 
     test('applyPulledBills applies server-side soft delete', () async {

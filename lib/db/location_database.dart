@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -17,8 +18,8 @@ class LocationDatabase {
   static const int schemaVersion = 3;
 
   static Future<String> dbPathForLocationCode(String locationCode) async {
-    final supportDir = await getApplicationSupportDirectory();
-    return join(supportDir.path, '${locationCode.toLowerCase()}_sales.db');
+    SalesDatabase.normalizeLocationCode(locationCode);
+    return SalesDatabase.salesDbPath();
   }
 
   static String displayNameForCode(String locationCode) {

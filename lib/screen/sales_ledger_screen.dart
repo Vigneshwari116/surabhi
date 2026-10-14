@@ -112,7 +112,10 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
   Future<void> _pullInBackground({bool showFeedback = false}) async {
     setState(() => _pulling = true);
 
-    final result = await SyncService.instance.pullAdminUpdates(widget.location);
+    final result = await SyncService.instance.pullAdminUpdates(
+      widget.location,
+      automatic: true,
+    );
 
     if (!mounted) return;
 
