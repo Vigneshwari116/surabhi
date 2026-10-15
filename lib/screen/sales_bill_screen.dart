@@ -18,6 +18,7 @@ import 'package:surabhi/services/bill_print_service.dart';
 import 'package:surabhi/services/session_service.dart';
 
 import 'bill_item.dart';
+import 'package:surabhi/screen/sale_groups.dart';
 import 'package:surabhi/screen/number%20to%20words.dart';
 import 'login_screen.dart';
 import 'sales_ledger_screen.dart';
@@ -72,7 +73,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _entryFontSize = 24;
   static const double _normalFontSize = 18;
   static const double _gridFontSize = 18;
-  static const double _grandTotalAmountFontSize = 28;
+  static const double _grandTotalAmountFontSize = 24;
   static const double _amountInWordsFontSize = 14;
   static const double _todayCardLabelFontSize = 16;
   static const double _todayCardValueFontSize = 18;
@@ -88,6 +89,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _customerBoxHeight = 36;
   static const double _groupBoxWidth = 240;
   static const double _numericBoxWidth = 150;
+  static const double _entryColumnGap = 12;
   static const double _entryBoxHeight = 52;
   static const double _entryFieldVerticalPadding = 14;
   static const double _customerFieldVerticalPadding = 9;
@@ -97,13 +99,25 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _framePadding = 8;
   static const double _tableHeaderHeight = 40;
   static const double _tableRowHeight = 38;
-  static const double _gridFooterHeight = 68;
-  static const double _bottomBarHeight = 44;
-  static const double _desktopChromeEstimate = 276;
-  static const double _gridMinScrollHeight =
-      _tableHeaderHeight + (_tableRowHeight * 6) + _gridFooterHeight;
-  static const double _todaySalesFrameWidth = 268;
+  static const double _editRowHeight = 68;
+  static const double _gridFooterTotalRowHeight = 34;
+  static const double _gridFooterGrandRowHeight = 64;
+  static const double _gridFooterHeight =
+      _gridFooterTotalRowHeight + _gridFooterGrandRowHeight;
+  static const double _grandTotalLabelFontSize = 20;
+  static const double _grandTotalValueFontSize = 28;
+  static const double _grandTotalWordsFontSize = 13;
   static const double _deleteColWidth = 48;
+  static const double _entryBlockWidth =
+      _groupBoxWidth + (_entryColumnGap * 3) + (_numericBoxWidth * 3);
+  static const double _gridTotalWidth = _entryBlockWidth + _deleteColWidth;
+  static const double _gridBodyHeight = (_tableRowHeight * 5) - 18;
+  static const double _gridFrameHeight =
+      _tableHeaderHeight + _gridBodyHeight + _gridFooterHeight;
+  static const double _bottomBarHeight = 44;
+  static const double _desktopChromeEstimate = 320;
+  static const double _gridMinScrollHeight = _gridFrameHeight;
+  static const double _todaySalesFrameWidth = 268;
   static const double _gridColWidth = 116;
   static const double _desktopBreakpoint = 900;
   static const double _sidebarBreakpoint = 700;
@@ -149,8 +163,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     'CARD',
   ];
 
-  List<String> _masterParticulars = [];
-  String? _selectedParticular;
+  String? _selectedParticular = kSaleGroups.first;
   String? _particularError;
 
   // ============================================================
@@ -186,10 +199,15 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   final FocusNode _groupFocus = FocusNode();
   final FocusNode _paymentFocus = FocusNode();
-  final FocusNode _amountFocus = FocusNode();
   final FocusNode _saveSaleFocus = FocusNode();
 
-  String _lastFocusField = 'name';
+  final ScrollController _gridHeaderHScrollController = ScrollController();
+  final ScrollController _gridHScrollController = ScrollController();
+  final ScrollController _gridVScrollController = ScrollController();
+  final ScrollController _gridDeleteVScrollController = ScrollController();
+  bool _syncingGridScroll = false;
+
+  String _lastFocusField = 'payment';
 
   double _todayAmount = 0;
   double _todayGst = 0;
@@ -226,7 +244,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   void didUpdateWidget(covariant SalesBillScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
-      unawaited(_loadMasterParticulars());
+      unawaited(() async {
+        await _refreshBillNumberFromDatabase();
+        if (_items.isEmpty && !_billSaved) {
+          await _loadBillNumber();
+        } else if (!_billSaved) {
+          await _alignDraftBillNoIfTaken();
+        }
+      }());
     }
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -253,18 +278,22 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _qtyFocus.addListener(() {
       if (_qtyFocus.hasFocus) _onFieldFocused('qty');
     });
-    _paymentFocus.addListener(() {
-      if (_paymentFocus.hasFocus) _onFieldFocused('payment');
-    });
     _groupFocus.addListener(() {
       if (_groupFocus.hasFocus) _onFieldFocused('group');
+      _onEntryFocusChanged(_groupFocus);
     });
+
+    _paymentFocus.addListener(_onPaymentFocusChanged);
+    _rateFocus.addListener(() => _onEntryFocusChanged(_rateFocus, _rateController));
+    _qtyFocus.addListener(() => _onEntryFocusChanged(_qtyFocus, _qtyController));
+    _gridHScrollController.addListener(_syncHeaderScrollFromBody);
+    _gridVScrollController.addListener(_syncDeleteScrollFromGrid);
+    _gridDeleteVScrollController.addListener(_syncGridScrollFromDelete);
 
     _manualPushInProgress = SyncService.instance.manualPushInProgress.value;
     SyncService.instance.manualPushInProgress.addListener(_onManualPushChanged);
 
     _loadGstRates();
-    unawaited(_loadMasterParticulars());
 
     if (widget.initialBillNo != null) {
       _billNo = widget.initialBillNo!;
@@ -278,6 +307,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         }
       });
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_refreshBillNumberFromDatabase());
+    });
   }
 
   void _onNumericFocus(FocusNode node, TextEditingController controller) {
@@ -316,6 +349,94 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   void _focusPayment() {
     if (!mounted) return;
     _paymentFocus.requestFocus();
+  }
+
+  void _onPaymentFocusChanged() {
+    if (_paymentFocus.hasFocus) {
+      _onFieldFocused('payment');
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onEntryFocusChanged(FocusNode node, [TextEditingController? controller]) {
+    if (node.hasFocus && controller != null) {
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _syncDeleteScrollFromGrid() {
+    if (_syncingGridScroll) return;
+    if (!_gridDeleteVScrollController.hasClients ||
+        !_gridVScrollController.hasClients) {
+      return;
+    }
+    _syncingGridScroll = true;
+    _gridDeleteVScrollController.jumpTo(_gridVScrollController.offset);
+    _syncingGridScroll = false;
+  }
+
+  void _syncGridScrollFromDelete() {
+    if (_syncingGridScroll) return;
+    if (!_gridDeleteVScrollController.hasClients ||
+        !_gridVScrollController.hasClients) {
+      return;
+    }
+    _syncingGridScroll = true;
+    _gridVScrollController.jumpTo(_gridDeleteVScrollController.offset);
+    _syncingGridScroll = false;
+  }
+
+  InputDecoration _highlightedInputDecoration({
+    required bool focused,
+    Color? fillColor,
+    EdgeInsetsGeometry? contentPadding,
+  }) {
+    final borderColor =
+        focused ? const Color(0xFF006064) : AppColors.border;
+    final borderWidth = focused ? 2.0 : 1.0;
+    final border = OutlineInputBorder(
+      borderSide: BorderSide(color: borderColor, width: borderWidth),
+    );
+    return InputDecoration(
+      isDense: false,
+      filled: true,
+      fillColor: focused ? billNoColor : (fillColor ?? Colors.white),
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border,
+      disabledBorder: border,
+      contentPadding: contentPadding ??
+          const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: _entryFieldVerticalPadding,
+          ),
+      alignLabelWithHint: true,
+    );
+  }
+
+  BoxDecoration _highlightedBoxDecoration({required bool focused}) {
+    return BoxDecoration(
+      color: focused ? billNoColor : Colors.white,
+      border: Border.all(
+        color: focused ? const Color(0xFF006064) : AppColors.border,
+        width: focused ? 2 : 1,
+      ),
+      borderRadius: BorderRadius.circular(4),
+    );
+  }
+
+  void _syncHeaderScrollFromBody() {
+    if (!_gridHeaderHScrollController.hasClients ||
+        !_gridHScrollController.hasClients) {
+      return;
+    }
+    if (_gridHeaderHScrollController.offset != _gridHScrollController.offset) {
+      _gridHeaderHScrollController.jumpTo(_gridHScrollController.offset);
+    }
   }
 
   void _focusName() {
@@ -357,6 +478,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _showMessage(result.summaryMessage);
   }
 
+  Future<void> _refreshBillNumberFromDatabase() async {
+    try {
+      await LocalDb.instance.refreshNextBillNoFromBills(_selectedLocation);
+    } catch (_) {
+      // Best-effort; screen can still load from session.
+    }
+  }
+
   Future<void> _restoreSessionOrLoadBill() async {
     final session = await SessionService.loadBillSession();
 
@@ -382,6 +511,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         _selectedIndex = null;
         _currentBillLocalId = null;
       });
+
+      if (!session.billSaved) {
+        await _alignDraftBillNoIfTaken();
+      }
+      await _refreshBillNumberFromDatabase();
       return;
     }
 
@@ -391,6 +525,27 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     await _loadBillNumber();
     if (!mounted) return;
+  }
+
+  Future<void> _alignDraftBillNoIfTaken() async {
+    try {
+      final taken = await LocalDb.instance.getBillByNumber(
+        location: _selectedLocation,
+        billNo: _billNo,
+      );
+      if (taken == null || !mounted) {
+        return;
+      }
+      final next = await LocalDb.instance.peekNextBillNoFromBills(
+        _selectedLocation,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _billNo = next);
+    } catch (_) {
+      // Keep current bill number on lookup failure.
+    }
   }
 
   Future<void> _persistSession() async {
@@ -411,7 +566,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Future<void> _loadBillNumber() async {
-    var nextBillNo =
+    await _refreshBillNumberFromDatabase();
+    final nextBillNo =
         await BillRepository.getNextBillNumber(_selectedLocation);
 
     if (!mounted) return;
@@ -548,8 +704,28 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   int _gridDataColumnCount(bool showTax) => showTax ? 9 : 6;
 
-  double _gridTableWidth(bool showTax) =>
-      _gridDataColumnCount(showTax) * _gridColWidth + _deleteColWidth;
+  double get _gridViewportWidth => _entryBlockWidth;
+
+  double get _primaryGridColWidth => _gridViewportWidth / 5;
+
+  double _leftGridScrollWidth(bool showTax) {
+    final extraCols = math.max(0, _gridDataColumnCount(showTax) - 5);
+    return _gridViewportWidth + extraCols * _gridColWidth;
+  }
+
+  List<Widget> _layoutGridCells(
+    bool showTax,
+    List<Widget> cells,
+  ) {
+    final primary = _primaryGridColWidth;
+    return List.generate(
+      cells.length,
+      (index) => SizedBox(
+        width: index < 5 ? primary : _gridColWidth,
+        child: cells[index],
+      ),
+    );
+  }
 
   // ============================================================
   // FOCUS RATE
@@ -612,28 +788,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _particularError = null;
   }
 
-  Future<void> _loadMasterParticulars() async {
-    try {
-      final names = await LocalDb.instance.listMasterItemNames();
-      if (!mounted) return;
-      setState(() {
-        _masterParticulars = names;
-        if (_selectedParticular != null &&
-            !_masterParticulars.contains(_selectedParticular)) {
-          _selectedParticular = null;
-        }
-      });
-    } catch (_) {
-      // Master list is optional until DB is ready.
-    }
-  }
-
   bool _validateParticular({bool focusOnError = true}) {
     final selected = _selectedParticular?.trim() ?? '';
     if (selected.isEmpty) {
-      setState(() => _particularError = 'Select a group from MASTER');
+      setState(() => _particularError = 'Select a group');
       if (focusOnError) {
-        _showMessage('Add items in MASTER menu, then select here');
+        _focusGroup();
       }
       return false;
     }
@@ -642,7 +802,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   bool _validateRate({bool focusOnError = true}) {
-    final rate = double.tryParse(_rateController.text);
+    final text = _rateController.text.trim();
+    if (text.isEmpty) {
+      setState(() => _rateError = 'Rate must be greater than 0');
+      if (focusOnError) _focusRate();
+      return false;
+    }
+    final rate = double.tryParse(text);
     if (rate == null || rate <= 0) {
       setState(() => _rateError = 'Rate must be greater than 0');
       if (focusOnError) _focusRate();
@@ -653,7 +819,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   bool _validateQty({bool focusOnError = true}) {
-    final qty = double.tryParse(_qtyController.text);
+    final text = _qtyController.text.trim();
+    if (text.isEmpty) {
+      setState(() => _qtyError = 'Quantity must be greater than 0');
+      if (focusOnError) _focusQty();
+      return false;
+    }
+    final qty = double.tryParse(text);
     if (qty == null || qty <= 0) {
       setState(() => _qtyError = 'Quantity must be greater than 0');
       if (focusOnError) _focusQty();
@@ -683,20 +855,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       return;
     }
 
-    if (!_validateRate()) {
-      return;
-    }
-
     _focusQty();
   }
 
   void _qtySubmitted() {
-    if (!_validateParticular() ||
-        !_validateRate() ||
-        !_validateQty()) {
+    _updateAmountDisplay();
+    if (!_validateParticular() || !_validateRate() || !_validateQty()) {
       return;
     }
-
     _addItem();
   }
 
@@ -730,6 +896,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       // Reset fields to ZERO
       _rateController.text = '0';
       _qtyController.text = '0';
+      _amountController.text = '0';
     });
 
     _persistSession();
@@ -823,7 +990,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _billDate = DateTime.now();
 
     _paymentMode = 'UPI';
-    _selectedParticular = null;
+    _selectedParticular = kSaleGroups.first;
 
     _customerNameController.text = '';
 
@@ -871,6 +1038,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       if (!result.ok) {
         _showMessage(result.error ?? 'Failed to save bill');
         return;
+      }
+
+      if (result.data != null && result.data != _billNo) {
+        setState(() => _billNo = result.data!);
       }
 
       try {
@@ -948,7 +1119,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusRate();
+        if (mounted) _focusPayment();
       });
     } catch (e) {
       if (mounted) {
@@ -1309,23 +1480,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 menuContext: context,
               ),
               const SizedBox(height: _topAreaGap),
-              if (expandGrid)
-                Expanded(
-                  child: _buildDesktopGridZone(
-                    gridFontSize: gridFontSize,
-                  ),
-                )
-              else
-                SizedBox(
-                  height: gridHeight ??
-                      math.max(
-                        _gridMinScrollHeight,
-                        constraints.maxHeight - _desktopChromeEstimate,
-                      ),
-                  child: _buildDesktopGridZone(
-                    gridFontSize: gridFontSize,
-                  ),
+              SizedBox(
+                height: _gridFrameHeight,
+                child: _buildDesktopGridZone(
+                  gridFontSize: gridFontSize,
                 ),
+              ),
               const SizedBox(height: _topAreaGap),
               _buildSaveSaleBar(),
             ],
@@ -1791,7 +1951,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       fontSize: _normalFontSize,
       color: Colors.black,
     );
-    const boxBorder = OutlineInputBorder();
 
     return Container(
       decoration: BoxDecoration(
@@ -1844,12 +2003,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                     isDense: true,
                     isExpanded: true,
                     alignment: AlignmentDirectional.centerStart,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: _paymentFillColor(_paymentMode),
-                      border: boxBorder,
-                      enabledBorder: boxBorder,
-                      focusedBorder: boxBorder,
+                    decoration: _highlightedInputDecoration(
+                      focused: _paymentFocus.hasFocus,
+                      fillColor: _paymentFocus.hasFocus
+                          ? billNoColor
+                          : _paymentFillColor(_paymentMode),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 8,
@@ -1857,11 +2015,15 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                     ),
                     icon: Icon(
                       Icons.arrow_drop_down,
-                      color: _paymentTextColor(_paymentMode),
+                      color: _paymentFocus.hasFocus
+                          ? Colors.black
+                          : _paymentTextColor(_paymentMode),
                     ),
                     style: TextStyle(
-                      fontSize: _normalFontSize,
-                      color: _paymentTextColor(_paymentMode),
+                      fontSize: _entryFontSize,
+                      color: _paymentFocus.hasFocus
+                          ? Colors.black
+                          : _paymentTextColor(_paymentMode),
                       fontWeight: FontWeight.w600,
                     ),
                     dropdownColor: Colors.white,
@@ -1873,8 +2035,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                               child: Text(
                                 mode,
                                 style: TextStyle(
-                                  fontSize: _normalFontSize,
-                                  color: _paymentTextColor(_paymentMode),
+                                  fontSize: _entryFontSize,
+                                  color: _paymentFocus.hasFocus
+                                      ? Colors.black
+                                      : _paymentTextColor(_paymentMode),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1888,7 +2052,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                         child: Text(
                           item,
                           style: const TextStyle(
-                            fontSize: _normalFontSize,
+                            fontSize: _entryFontSize,
                             color: Colors.black,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1903,8 +2067,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                       setState(() {
                         _paymentMode = value;
                       });
-                      _onFieldFocused('name');
-                      _focusName();
+                      _focusGroup();
                     },
                   ),
                 ),
@@ -1950,7 +2113,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Widget _buildCustomerDetails() {
+    const labelStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      color: Colors.black,
+    );
+
     return Container(
+      width: _customerBoxWidth + (_framePadding * 2),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
       ),
@@ -1959,47 +2129,62 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: const Text(
-              'CUSTOMER DETAILS',
-              style: TextStyle(
-                fontSize: _normalFontSize,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-          ),
-          const SizedBox(height: 2),
-          _buildLabeledCustomerField(
-            label: 'NAME',
-            fieldWidth: _customerBoxWidth,
-            traversalOrder: const NumericFocusOrder(7),
-            child: _smallTextField(
-              _customerNameController,
-              focusNode: _nameFocus,
-              textInputAction: TextInputAction.next,
-              onSubmitted: (_) => _focusMobile(),
-              compact: true,
+          const Text(
+            'CUSTOMER DETAILS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
             ),
           ),
           const SizedBox(height: 4),
-          _buildLabeledCustomerField(
-            label: 'MOBILE',
-            fieldWidth: _customerBoxWidth,
-            traversalOrder: const NumericFocusOrder(8),
-            child: GestureDetector(
-              onDoubleTap: _onMobileDoubleTap,
-              child: _smallTextField(
-                _mobileController,
-                number: true,
-                fieldKey: const Key('bill_mobile_field'),
-                focusNode: _mobileFocus,
-                textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _focusGroup(),
-                compact: true,
-              ),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(7),
+            child: Row(
+              children: [
+                const SizedBox(width: 56, child: Text('NAME', style: labelStyle)),
+                Expanded(
+                  child: SizedBox(
+                    height: _customerBoxHeight,
+                    child: _smallTextField(
+                      _customerNameController,
+                      focusNode: _nameFocus,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => _focusMobile(),
+                      compact: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(8),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 56,
+                  child: Text('MOBILE', style: labelStyle),
+                ),
+                Expanded(
+                  child: SizedBox(
+                    height: _customerBoxHeight,
+                    child: GestureDetector(
+                      onDoubleTap: _onMobileDoubleTap,
+                      child: _smallTextField(
+                        _mobileController,
+                        number: true,
+                        fieldKey: const Key('bill_mobile_field'),
+                        focusNode: _mobileFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) => _focusGroup(),
+                        compact: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           if (_showPasswordField && !_editUnlocked) ...[
@@ -2203,7 +2388,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   Widget _buildStackedEntryField({
     required String label,
     required TextEditingController controller,
-    double fontSize = _entryFontSize,
+    double labelFontSize = _normalFontSize,
+    double valueFontSize = _entryFontSize,
     FocusNode? focusNode,
     ValueChanged<String>? onChanged,
     VoidCallback? onSubmitted,
@@ -2214,6 +2400,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     double width = _numericBoxWidth,
     NumericFocusOrder? traversalOrder,
   }) {
+    final focused = focusNode?.hasFocus ?? false;
     Widget field = TextField(
       key: fieldKey,
       controller: controller,
@@ -2231,10 +2418,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             ],
       onChanged: onChanged,
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
-      decoration: _entryDecoration(),
+      onEditingComplete: onSubmitted,
+      decoration: _highlightedInputDecoration(focused: focused),
       textAlignVertical: TextAlignVertical.center,
       style: TextStyle(
-        fontSize: fontSize,
+        fontSize: valueFontSize,
         height: 1,
         color: Colors.black,
       ),
@@ -2253,6 +2441,23 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       );
     }
 
+    if (readOnly && onSubmitted != null) {
+      field = Focus(
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+            onSubmitted();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: field,
+      );
+    }
+
     final column = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -2260,7 +2465,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         Text(
           label,
           style: TextStyle(
-            fontSize: fontSize,
+            fontSize: labelFontSize,
             fontWeight: FontWeight.w700,
             color: Colors.black,
           ),
@@ -2281,7 +2486,49 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     return FocusTraversalOrder(order: traversalOrder, child: column);
   }
 
-  Widget _buildStackedGroupDropdown({double fontSize = _entryFontSize}) {
+  Widget _buildAmountDisplayField() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Text(
+          'AMOUNT',
+          style: TextStyle(
+            fontSize: _normalFontSize,
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: _numericBoxWidth,
+          height: _entryBoxHeight,
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            child: TextField(
+              key: const Key('bill_amount_field'),
+              controller: _amountController,
+              readOnly: true,
+              showCursor: false,
+              enableInteractiveSelection: false,
+              textAlign: TextAlign.center,
+              decoration: _entryDecoration(),
+              style: const TextStyle(
+                fontSize: _entryFontSize,
+                height: 1,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStackedGroupDropdown({
+    double labelFontSize = _normalFontSize,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -2289,7 +2536,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         Text(
           'GROUP',
           style: TextStyle(
-            fontSize: fontSize,
+            fontSize: labelFontSize,
             fontWeight: FontWeight.w700,
             color: Colors.black,
           ),
@@ -2308,67 +2555,64 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildItemMasterDropdown() {
-    return Container(
-      height: _entryBoxHeight,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          key: const Key('bill_group_dropdown'),
-          focusNode: _groupFocus,
-          value: _selectedParticular,
-          isExpanded: true,
-          itemHeight: _entryBoxHeight,
-          alignment: AlignmentDirectional.centerStart,
-          dropdownColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          style: const TextStyle(
-            fontSize: _entryFontSize,
-            color: Colors.black,
-            height: 1,
-          ),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.black, size: 28),
-          hint: const Text(
-            'SELECT',
-            style: TextStyle(
+    final focused = _groupFocus.hasFocus;
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          _focusRate();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        height: _entryBoxHeight,
+        decoration: _highlightedBoxDecoration(focused: focused),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            key: const Key('bill_group_dropdown'),
+            focusNode: _groupFocus,
+            value: _selectedParticular,
+            isExpanded: true,
+            itemHeight: _entryBoxHeight,
+            alignment: AlignmentDirectional.centerStart,
+            dropdownColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            style: const TextStyle(
               fontSize: _entryFontSize,
-              color: Colors.black54,
+              color: Colors.black,
               height: 1,
             ),
-          ),
-          items: _masterParticulars
-              .map(
-                (name) => DropdownMenuItem(
-                  value: name,
-                  child: Text(
-                    name.toUpperCase(),
-                    overflow: TextOverflow.visible,
-                    softWrap: true,
-                    style: const TextStyle(
-                      fontSize: _entryFontSize,
-                      color: Colors.black,
-                      height: 1,
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.black, size: 28),
+            items: kSaleGroups
+                .map(
+                  (name) => DropdownMenuItem(
+                    value: name,
+                    child: Text(
+                      name,
+                      overflow: TextOverflow.visible,
+                      softWrap: true,
+                      style: const TextStyle(
+                        fontSize: _entryFontSize,
+                        color: Colors.black,
+                        height: 1,
+                      ),
                     ),
                   ),
-                ),
-              )
-              .toList(growable: false),
-          onChanged: (value) {
-            setState(() {
-              _selectedParticular = value;
-              _particularError = null;
-            });
-            _focusRate();
-          },
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              setState(() {
+                _selectedParticular = value;
+                _particularError = null;
+              });
+              _focusRate();
+            },
+          ),
         ),
       ),
     );
   }
-
-  static const double _entryColumnGap = 12;
 
   Widget _buildAlignedEntryRow({
     required bool showTax,
@@ -2387,11 +2631,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _buildStackedGroupDropdown(fontSize: _entryFontSize),
+            _buildStackedGroupDropdown(),
             const SizedBox(width: _entryColumnGap),
             _buildStackedEntryField(
               label: 'RATE',
-              fontSize: _entryFontSize,
               controller: _rateController,
               focusNode: _rateFocus,
               onChanged: _rateChanged,
@@ -2403,7 +2646,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             const SizedBox(width: _entryColumnGap),
             _buildStackedEntryField(
               label: 'QTY',
-              fontSize: _entryFontSize,
               controller: _qtyController,
               focusNode: _qtyFocus,
               onChanged: _qtyChanged,
@@ -2413,14 +2655,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               traversalOrder: const NumericFocusOrder(4),
             ),
             const SizedBox(width: _entryColumnGap),
-            _buildStackedEntryField(
-              label: 'AMOUNT',
-              fontSize: _entryFontSize,
-              controller: _amountController,
-              focusNode: _amountFocus,
-              readOnly: true,
-              traversalOrder: const NumericFocusOrder(5),
-            ),
+            _buildAmountDisplayField(),
           ],
         ),
         ..._entryRowErrors(),
@@ -2457,11 +2692,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               textInputAction: TextInputAction.done,
               fieldKey: const Key('bill_qty_field'),
             ),
-            _buildStackedEntryField(
-              label: 'AMOUNT',
-              controller: _amountController,
-              readOnly: true,
-            ),
+            _buildAmountDisplayField(),
           ],
         ),
         ..._entryRowErrors(),
@@ -2511,16 +2742,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       children: [
         _buildAlignedEntryRow(showTax: showTax, mobile: mobile),
         const SizedBox(height: _topAreaGap),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            return _buildGridFrame(
-              viewportWidth: constraints.maxWidth,
-              showTax: showTax,
-              gridFontSize: _gridFontSize,
-              scrollItems: false,
-            );
-          },
-        ),
+        _buildGridFrame(showTax: showTax, gridFontSize: _gridFontSize),
       ],
     );
   }
@@ -2529,33 +2751,32 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     required double gridFontSize,
   }) {
     final showTax = _items.isNotEmpty;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: _buildGridFrame(
-            viewportWidth: constraints.maxWidth,
-            showTax: showTax,
-            gridFontSize: gridFontSize,
-            scrollItems: true,
-          ),
-        );
-      },
+    return Align(
+      alignment: Alignment.topLeft,
+      child: _buildGridFrame(showTax: showTax, gridFontSize: gridFontSize),
     );
   }
 
   Widget _buildGridFrame({
-    required double viewportWidth,
     required bool showTax,
     required double gridFontSize,
-    required bool scrollItems,
   }) {
-    final tableWidth = _gridTableWidth(showTax);
-    final useHorizontalScroll =
-        viewportWidth.isFinite && viewportWidth < tableWidth;
+    final scrollWidth = _leftGridScrollWidth(showTax);
 
-    Widget grid = SizedBox(
-      width: tableWidth,
+    Widget horizontalHeader = SizedBox(
+      width: scrollWidth,
+      child: _buildTableHeader(showTax, gridFontSize, scrollWidth),
+    );
+
+    Widget horizontalBody = SizedBox(
+      width: scrollWidth,
+      height: _gridBodyHeight,
+      child: _buildItemRowsList(showTax, gridFontSize, scrollWidth),
+    );
+
+    return SizedBox(
+      width: _gridTotalWidth,
+      height: _gridFrameHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardWhite,
@@ -2564,98 +2785,105 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildTableHeader(showTax, gridFontSize, tableWidth),
-            if (scrollItems)
-              Expanded(
-                child: _buildItemRowsList(showTax, gridFontSize, tableWidth),
-              )
-            else
-              _buildItemRowsColumn(showTax, gridFontSize, tableWidth),
-            _buildGrandTotalFooter(gridFontSize, tableWidth),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: _gridViewportWidth,
+                  child: SingleChildScrollView(
+                    controller: _gridHeaderHScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: horizontalHeader,
+                  ),
+                ),
+                _tableDeleteHeaderCell(),
+              ],
+            ),
+            SizedBox(
+              height: _gridBodyHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: _gridViewportWidth,
+                    child: Scrollbar(
+                      controller: _gridHScrollController,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _gridHScrollController,
+                        scrollDirection: Axis.horizontal,
+                        child: horizontalBody,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: _deleteColWidth,
+                    height: _gridBodyHeight,
+                    child: _buildDeleteRowsList(),
+                  ),
+                ],
+              ),
+            ),
+            _buildFixedGridFooter(gridFontSize),
           ],
         ),
       ),
     );
-
-    if (useHorizontalScroll) {
-      grid = SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: grid,
-      );
-    }
-
-    if (scrollItems) {
-      return grid;
-    }
-
-    return Align(alignment: Alignment.topLeft, child: grid);
   }
 
   Widget _buildItemRowsList(
     bool showTax,
     double gridFontSize,
-    double tableWidth,
+    double scrollWidth,
   ) {
-    return SizedBox(
-      width: tableWidth,
-      child: DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         color: AppColors.background,
       ),
       child: ClipRect(
-      child: ListView.builder(
-        padding: EdgeInsets.zero,
-        itemCount: _items.length,
-        itemBuilder: (context, index) {
-          if (_editingIndex == index) {
-            return _buildEditRow(index);
-          }
-          return _buildTableRow(index, showTax, gridFontSize, tableWidth);
-        },
-      ),
-      ),
-      ),
-    );
-  }
-
-  Widget _buildItemRowsColumn(
-    bool showTax,
-    double gridFontSize,
-    double tableWidth,
-  ) {
-    return SizedBox(
-      width: tableWidth,
-      child: DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        color: AppColors.background,
-      ),
-      child: ClipRect(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(_items.length, (index) {
-          if (_editingIndex == index) {
-            return _buildEditRow(index);
-          }
-          return _buildTableRow(index, showTax, gridFontSize, tableWidth);
-        }),
-      ),
-      ),
+        child: ListView.builder(
+          controller: _gridVScrollController,
+          padding: EdgeInsets.zero,
+          itemCount: _items.length,
+          itemBuilder: (context, index) {
+            if (_editingIndex == index) {
+              return SizedBox(
+                width: scrollWidth,
+                child: _buildEditRow(index),
+              );
+            }
+            return _buildTableRow(
+              index,
+              showTax,
+              gridFontSize,
+              scrollWidth,
+            );
+          },
+        ),
       ),
     );
   }
 
-  List<Widget> _fixedDataColumns(
-    bool showTax, {
-    required List<Widget> cells,
-  }) {
-    final count = _gridDataColumnCount(showTax);
-    return List.generate(
-      count,
-      (index) => SizedBox(width: _gridColWidth, child: cells[index]),
+  Widget _buildDeleteRowsList() {
+    return ListView.builder(
+      controller: _gridDeleteVScrollController,
+      padding: EdgeInsets.zero,
+      physics: const ClampingScrollPhysics(),
+      itemCount: _items.length,
+      itemBuilder: (context, index) {
+        if (_editingIndex == index) {
+          return SizedBox(
+            height: _editRowHeight,
+            child: ColoredBox(
+              color: const Color(0xFFFFF8E1),
+              child: const SizedBox.shrink(),
+            ),
+          );
+        }
+        return _buildDeleteCell(index);
+      },
     );
   }
 
@@ -2666,7 +2894,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   Widget _buildTableHeader(
     bool showTax,
     double gridFontSize,
-    double tableWidth,
+    double scrollWidth,
   ) {
     final headerCells = [
       _tableHeaderCell('S.NO', gridFontSize),
@@ -2683,19 +2911,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     ];
 
     return SizedBox(
-      width: tableWidth,
+      width: scrollWidth,
       height: _tableHeaderHeight,
       child: ColoredBox(
         color: AppColors.tableHeader,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ..._fixedDataColumns(
-              showTax,
-              cells: headerCells,
-            ),
-            _tableDeleteHeaderCell(),
-          ],
+          children: _layoutGridCells(showTax, headerCells),
         ),
       ),
     );
@@ -2749,6 +2971,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildEditRow(int index) {
     return Container(
+      height: _editRowHeight,
       color: const Color(0xFFFFF8E1),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
@@ -2837,7 +3060,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     int index,
     bool showTax,
     double gridFontSize,
-    double tableWidth,
+    double scrollWidth,
   ) {
     final BillItem item = _items[index];
 
@@ -2895,16 +3118,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         });
       },
       child: SizedBox(
-        width: tableWidth,
+        width: scrollWidth,
         height: _tableRowHeight,
         child: ColoredBox(
           color: selected ? const Color(0xFFFFE5A0) : AppColors.background,
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              ..._fixedDataColumns(showTax, cells: dataCells),
-              _buildDeleteCell(index),
-            ],
+            children: _layoutGridCells(showTax, dataCells),
           ),
         ),
       ),
@@ -2975,73 +3195,175 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   // ============================================================
-  // GRAND TOTAL (below item table only)
+  // GRID FOOTER (Total + Grand total rows)
   // ============================================================
 
-  Widget _buildGrandTotalFooter(double gridFontSize, double tableWidth) {
-    final words = amountInWords(_grandTotal).toUpperCase();
-    return SizedBox(
-      width: tableWidth,
-      height: _gridFooterHeight,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.headerBand,
-          border: Border(
-            left: BorderSide(color: AppColors.border),
-            right: BorderSide(color: AppColors.border),
-            bottom: BorderSide(color: AppColors.border),
+  Widget _footerLabelCell(
+    String text, {
+    bool last = false,
+    FontWeight fontWeight = FontWeight.w700,
+  }) {
+    return Container(
+      height: _gridFooterTotalRowHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: AppColors.headerBand,
+        border: Border(
+          right: last
+              ? BorderSide.none
+              : BorderSide(color: AppColors.border, width: 0.6),
+          bottom: BorderSide(color: AppColors.border, width: 0.6),
+        ),
+      ),
+      alignment: Alignment.center,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: _normalFontSize,
+            fontWeight: fontWeight,
+            color: AppColors.navy,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'PCS: ${formatPcs(_totalQty)}',
-              style: const TextStyle(
-                fontSize: _normalFontSize,
-                fontWeight: FontWeight.w700,
-                color: AppColors.navy,
-              ),
-            ),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
+      ),
+    );
+  }
+
+  Widget _buildFixedGridFooter(double gridFontSize) {
+    final words = amountInWords(_grandTotal).toUpperCase();
+    final qtyLabel = '${formatPcs(_totalQty)} (total pcs)';
+    final primary = _primaryGridColWidth;
+
+    return SizedBox(
+      width: _gridTotalWidth,
+      height: _gridFooterHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: _gridFooterTotalRowHeight,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: _gridViewportWidth,
+                  child: Row(
                     children: [
-                      Text(
-                        _formatAmount(_grandTotal),
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: _grandTotalAmountFontSize,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.navy,
-                        ),
+                      SizedBox(
+                        width: primary,
+                        child: _footerLabelCell('Total', last: false),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        words,
-                        maxLines: 1,
-                        softWrap: false,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: _amountInWordsFontSize,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.mutedBlue,
+                      SizedBox(width: primary, child: _footerLabelCell('')),
+                      SizedBox(width: primary, child: _footerLabelCell('')),
+                      SizedBox(
+                        width: primary,
+                        child: _footerLabelCell(qtyLabel),
+                      ),
+                      SizedBox(
+                        width: primary,
+                        child: _footerLabelCell(
+                          _formatAmount(_totalAmount),
+                          last: true,
                         ),
                       ),
                     ],
                   ),
                 ),
+                Container(
+                  width: _deleteColWidth,
+                  height: _gridFooterTotalRowHeight,
+                  decoration: BoxDecoration(
+                    color: AppColors.headerBand,
+                    border: Border(
+                      left: BorderSide(color: AppColors.border, width: 0.6),
+                      bottom: BorderSide(color: AppColors.border, width: 0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: _gridTotalWidth,
+            height: _gridFooterGrandRowHeight,
+            decoration: BoxDecoration(
+              color: AppColors.headerBand,
+              border: Border(
+                bottom: BorderSide(color: AppColors.border),
               ),
             ),
-          ],
-        ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: primary,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      'GRAND TOTAL',
+                      style: const TextStyle(
+                        fontSize: _grandTotalLabelFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: primary),
+                SizedBox(width: primary),
+                SizedBox(width: primary),
+                SizedBox(
+                  width: primary,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        SizedBox(
+                          height: 30,
+                          child: Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text(
+                              _formatAmount(_grandTotal),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                fontSize: _grandTotalValueFontSize,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.navy,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 28,
+                          child: Align(
+                            alignment: Alignment.topRight,
+                            child: Text(
+                              words,
+                              maxLines: 2,
+                              textAlign: TextAlign.right,
+                              softWrap: true,
+                              style: const TextStyle(
+                                fontSize: _grandTotalWordsFontSize,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.mutedBlue,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(width: _deleteColWidth),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3080,8 +3402,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     _groupFocus.dispose();
     _paymentFocus.dispose();
-    _amountFocus.dispose();
     _saveSaleFocus.dispose();
+
+    _gridHeaderHScrollController.dispose();
+    _gridHScrollController.dispose();
+    _gridVScrollController.dispose();
+    _gridDeleteVScrollController.dispose();
 
     super.dispose();
   }

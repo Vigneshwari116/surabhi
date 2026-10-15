@@ -296,21 +296,30 @@ class LocalDb {
   // ---------------------------------------------------------------------------
 
   Future<int> getNextBillNumber(String location) async {
-    await _ensureLocationMeta(location);
-    final db = await database;
-    final rows = await db.query(
-      'location_meta',
-      columns: ['next_bill_no'],
-      where: 'location = ?',
-      whereArgs: [location],
-      limit: 1,
-    );
+    await refreshNextBillNoFromBills(location);
+    return await peekNextBillNoFromBills(location);
+  }
 
-    if (rows.isEmpty) {
+  /// Next bill number from live rows: MAX(bill_no) + 1 (or 1 when empty).
+  Future<int> peekNextBillNoFromBills(String location) async {
+    final maxNo = await _maxBillNoForLocation(location);
+    if (maxNo == null) {
       return 1;
     }
+    return maxNo + 1;
+  }
 
-    return (rows.first['next_bill_no'] as num).toInt();
+  /// First bill number >= [startingAt] not present for [location].
+  Future<int> findNextFreeBillNo(
+    String location, {
+    int startingAt = 1,
+  }) async {
+    var candidate = startingAt;
+    while (
+        await getBillByNumber(location: location, billNo: candidate) != null) {
+      candidate++;
+    }
+    return candidate;
   }
 
   Future<DateTime?> getLastPullAt(String location) async {
@@ -525,6 +534,29 @@ class LocalDb {
     );
 
     if (existingId != null) {
+      final freeNo = await findNextFreeBillNo(
+        bill.location,
+        startingAt: bill.billNo,
+      );
+      if (freeNo != bill.billNo) {
+        final reassigned = SaleBill(
+          billNo: freeNo,
+          location: bill.location,
+          billDate: bill.billDate,
+          paymentMode: bill.paymentMode,
+          customerName: bill.customerName,
+          mobile: bill.mobile,
+          items: bill.items,
+          totalQty: bill.totalQty,
+          totalAmount: bill.totalAmount,
+          totalCgst: bill.totalCgst,
+          totalSgst: bill.totalSgst,
+          totalIgst: bill.totalIgst,
+          grandTotal: bill.grandTotal,
+          deleted: bill.deleted,
+        );
+        return insertBill(reassigned, syncStatus: syncStatus);
+      }
       await updateSavedBill(existingId, bill, syncStatus: syncStatus);
       return existingId;
     }
@@ -1049,33 +1081,46 @@ class LocalDb {
   }
 
   Future<void> _advanceNextBillNo(String location, int usedBillNo) async {
-    await _ensureLocationMeta(location);
-    final db = await database;
+    final fromBills = await peekNextBillNoFromBills(location);
     final next = usedBillNo + 1;
+    await _setNextBillNo(location, next > fromBills ? next : fromBills);
+  }
 
-    await db.rawUpdate(
-      '''
-      UPDATE location_meta
-      SET next_bill_no = MAX(next_bill_no, ?)
-      WHERE location = ?
-      ''',
-      [next, location],
-    );
+  Future<void> refreshNextBillNoFromBills(String location) async {
+    await _refreshNextBillNoFromBills(location);
   }
 
   Future<void> _refreshNextBillNoFromBills(String location) async {
+    final next = await peekNextBillNoFromBills(location);
+    await _setNextBillNo(location, next);
+  }
+
+  Future<int?> _maxBillNoForLocation(String location) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT MAX(bill_no) AS max_no FROM bills WHERE location = ?',
+      '''
+      SELECT MAX(bill_no) AS max_no
+      FROM bills
+      WHERE location = ? AND deleted = 0
+      ''',
       [location],
     );
-
     final maxNo = result.first['max_no'];
     if (maxNo == null) {
-      return;
+      return null;
     }
+    return (maxNo as num).toInt();
+  }
 
-    await _advanceNextBillNo(location, (maxNo as num).toInt());
+  Future<void> _setNextBillNo(String location, int nextBillNo) async {
+    await _ensureLocationMeta(location);
+    final db = await database;
+    await db.update(
+      'location_meta',
+      {'next_bill_no': nextBillNo},
+      where: 'location = ?',
+      whereArgs: [location],
+    );
   }
 
   static Map<String, Object?> _billToRow(
