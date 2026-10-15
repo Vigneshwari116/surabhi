@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/local_credentials.dart';
@@ -12,7 +10,6 @@ import 'package:surabhi/screen/master_screen.dart';
 import 'package:surabhi/screen/staff_sales_dashboard_screen.dart';
 import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
-import 'package:surabhi/services/old_sales_import_service.dart';
 import 'package:surabhi/services/location_reset_service.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/services/sync_gate_service.dart';
@@ -67,35 +64,6 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
     return section == _StaffSection.dashboard ||
         section == _StaffSection.abstract ||
         section == _StaffSection.ledger;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_maybeShowOldSalesImportReport());
-    });
-  }
-
-  Future<void> _maybeShowOldSalesImportReport() async {
-    final report = await OldSalesImportService.consumeReportForUi();
-    if (report == null || !mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Old sales import'),
-        content: SingleChildScrollView(
-          child: Text(report.toDisplayText()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _logout() async {

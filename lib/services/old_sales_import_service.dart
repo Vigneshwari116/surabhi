@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -67,7 +67,6 @@ class OldSalesImportReport {
 
 class OldSalesImportService {
   static const _prefDoneKey = 'old_sales_import_v1_done';
-  static const _prefReportKey = 'old_sales_import_v1_report';
 
   /// App default when legacy file left payment blank (bills 4 and 7).
   static const String defaultPaymentModeWhenBlank = 'UPI';
@@ -83,20 +82,11 @@ class OldSalesImportService {
     final report = await runImport();
     await prefs.setBool(_prefDoneKey, true);
     if (report.shouldShowUi) {
-      await prefs.setString(_prefReportKey, jsonEncode(report.toJson()));
+      developer.log(
+        report.toDisplayText(),
+        name: 'OldSalesImport',
+      );
     }
-  }
-
-  static Future<OldSalesImportReport?> consumeReportForUi() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefReportKey);
-    if (raw == null || raw.isEmpty) {
-      return null;
-    }
-    await prefs.remove(_prefReportKey);
-    return OldSalesImportReport.fromJson(
-      jsonDecode(raw) as Map<String, dynamic>,
-    );
   }
 
   static Future<OldSalesImportReport> runImport() async {
