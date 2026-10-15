@@ -2193,7 +2193,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     if (showTax) {
       width += _colTax * 3;
     }
-    return width;
+    // Inter-cell borders are drawn inside cells; add slack so rows do not overflow.
+    return width + 8;
   }
 
   Widget _buildItemTableSection({bool mobile = false}) {
@@ -2267,10 +2268,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Widget _buildTableHeader(bool showTax) {
-    return Container(
+    final width = _tableWidth(showTax);
+    return SizedBox(
+      width: width,
       height: _tableHeaderHeight,
-      color: AppColors.tableHeader,
-      child: Row(
+      child: ColoredBox(
+        color: AppColors.tableHeader,
+        child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           _tableHeaderCell('S.NO', _colSno),
           _tableHeaderCell('GROUP', _colGroup),
@@ -2290,6 +2295,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           ],
           _tableDeleteHeaderCell(),
         ],
+        ),
       ),
     );
   }
@@ -2451,9 +2457,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         });
       },
       child: Container(
+        width: _tableWidth(showTax),
         height: _tableRowHeight,
         color: selected ? const Color(0xFFFFE5A0) : AppColors.background,
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _tableDataCell('${index + 1}', _colSno),
             _tableDataCell(

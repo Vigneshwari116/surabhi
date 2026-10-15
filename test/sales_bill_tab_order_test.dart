@@ -64,7 +64,7 @@ void main() {
   });
 
   Future<void> pumpBill(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.physicalSize = const Size(2000, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -94,5 +94,8 @@ void main() {
     expect(find.byKey(const Key('save_sale_bar_button')), findsOneWidget);
     expect(find.byKey(const Key('bill_mobile_field')), findsOneWidget);
     expect(find.byKey(const Key('today_sales_button')), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(milliseconds: 500));
   });
 }
