@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/repositories/summary_repository.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 /// Month-wise and day-wise totals from summary database only.
@@ -149,22 +150,37 @@ class _SummaryAbstractScreenState extends State<SummaryAbstractScreen> {
       );
     }
 
-    final monthMap = {for (final row in _months) row.month: row.totalAmount};
+    final monthMap = {for (final row in _months) row.month: row};
 
     return ListView.separated(
       itemCount: 12,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final month = index + 1;
-        final total = monthMap[month] ?? 0;
+        final row = monthMap[month];
+        final total = row?.totalAmount ?? 0;
+        final pcs = row?.totalPcs ?? 0;
         return ListTile(
           title: Text(SummaryRepository.formatMonthLabel(month)),
-          trailing: Text(
-            _formatMoney(total),
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.navy,
-            ),
+          trailing: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatMoney(total),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navy,
+                ),
+              ),
+              Text(
+                'PCS: ${formatPcs(pcs)}',
+                style: const TextStyle(
+                  fontSize: AppTextSizes.listSubtitle,
+                  color: AppColors.mutedBlue,
+                ),
+              ),
+            ],
           ),
           onTap: () => _loadDays(month),
         );
@@ -190,12 +206,25 @@ class _SummaryAbstractScreenState extends State<SummaryAbstractScreen> {
         final label = DateFormat('dd MMM yyyy').format(DateTime.parse(row.day));
         return ListTile(
           title: Text(label),
-          trailing: Text(
-            _formatMoney(row.totalAmount),
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.navy,
-            ),
+          trailing: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatMoney(row.totalAmount),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.navy,
+                ),
+              ),
+              Text(
+                'PCS: ${formatPcs(row.totalPcs)}',
+                style: const TextStyle(
+                  fontSize: AppTextSizes.listSubtitle,
+                  color: AppColors.mutedBlue,
+                ),
+              ),
+            ],
           ),
         );
       },

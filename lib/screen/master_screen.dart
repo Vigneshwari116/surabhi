@@ -12,6 +12,13 @@ class MasterScreen extends StatefulWidget {
 }
 
 class _MasterScreenState extends State<MasterScreen> {
+  static const double _masterUiFontSize = 22;
+  static const double _descriptionFontSize = 18;
+  static const double _fieldHeight = 56;
+  static const double _nameFieldWidth = 520;
+  static const double _spacing = 12;
+  static const double _deleteIconSize = 28;
+
   final TextEditingController _nameCtrl = TextEditingController();
   List<String> _items = [];
   bool _loading = true;
@@ -78,6 +85,15 @@ class _MasterScreenState extends State<MasterScreen> {
     await _reload();
   }
 
+  InputDecoration _outlineDecoration({String? label}) {
+    return InputDecoration(
+      labelText: label,
+      isDense: true,
+      border: const OutlineInputBorder(),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,71 +101,103 @@ class _MasterScreenState extends State<MasterScreen> {
       appBar: sectionHeaderAppBar('MASTER'),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+        child: Align(
+          alignment: Alignment.topLeft,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Add groups (shirt, pant, etc.) for the sales bill dropdown.',
-                style: TextStyle(fontSize: 12, color: AppColors.navy),
+                style: TextStyle(
+                  fontSize: _descriptionFontSize,
+                  color: AppColors.navy,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: _spacing),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
+                  SizedBox(
+                    width: _nameFieldWidth,
+                    height: _fieldHeight,
                     child: TextField(
-                      controller: _nameCtrl,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _addItem(),
-                      decoration: const InputDecoration(
-                        labelText: 'Item name',
-                        isDense: true,
-                        border: OutlineInputBorder(),
+                        controller: _nameCtrl,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _addItem(),
+                        style: const TextStyle(fontSize: _masterUiFontSize),
+                        decoration: _outlineDecoration(label: 'Item name'),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _addItem,
-                    child: const Text('ADD'),
+                    const SizedBox(width: _spacing),
+                    SizedBox(
+                      height: _fieldHeight,
+                      child: ElevatedButton(
+                        onPressed: _addItem,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(120, _fieldHeight),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(
+                            fontSize: _masterUiFontSize,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        child: const Text('ADD'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: _spacing),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red, fontSize: 18),
                   ),
                 ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (_loading)
-                const Center(child: CircularProgressIndicator())
-              else if (_items.isEmpty)
-                const Text(
-                  'No items yet. Add your first item above.',
-                  style: TextStyle(fontSize: 12),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final name = _items[index];
-                      return ListTile(
-                        dense: true,
-                        title: Text(name),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Remove',
-                          onPressed: () => _deleteItem(name),
-                        ),
-                      );
-                    },
+                const SizedBox(height: _spacing),
+                if (_loading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_items.isEmpty)
+                  const Text(
+                    'No items yet. Add your first item above.',
+                    style: TextStyle(fontSize: _descriptionFontSize),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: _items.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: _spacing),
+                      itemBuilder: (context, index) {
+                        final name = _items[index];
+                        return SizedBox(
+                          height: _fieldHeight,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    name.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: _masterUiFontSize,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.navy,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                iconSize: _deleteIconSize,
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Remove',
+                                onPressed: () => _deleteItem(name),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
             ],
           ),
         ),
@@ -157,4 +205,3 @@ class _MasterScreenState extends State<MasterScreen> {
     );
   }
 }
-
