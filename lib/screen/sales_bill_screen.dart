@@ -227,6 +227,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
       unawaited(_loadMasterParticulars());
+      unawaited(() async {
+        await _refreshBillNumberFromDatabase();
+        if (_items.isEmpty && !_billSaved) {
+          await _loadBillNumber();
+        } else if (!_billSaved) {
+          await _alignDraftBillNoIfTaken();
+        }
+      }());
     }
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -278,6 +286,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         }
       });
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_refreshBillNumberFromDatabase());
+    });
   }
 
   void _onNumericFocus(FocusNode node, TextEditingController controller) {
@@ -357,6 +369,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _showMessage(result.summaryMessage);
   }
 
+  Future<void> _refreshBillNumberFromDatabase() async {
+    try {
+      await LocalDb.instance.refreshNextBillNoFromBills(_selectedLocation);
+    } catch (_) {
+      // Best-effort; screen can still load from session.
+    }
+  }
+
   Future<void> _restoreSessionOrLoadBill() async {
     final session = await SessionService.loadBillSession();
 
@@ -382,6 +402,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         _selectedIndex = null;
         _currentBillLocalId = null;
       });
+
+      if (!session.billSaved) {
+        await _alignDraftBillNoIfTaken();
+      }
+      await _refreshBillNumberFromDatabase();
       return;
     }
 
@@ -391,6 +416,27 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     await _loadBillNumber();
     if (!mounted) return;
+  }
+
+  Future<void> _alignDraftBillNoIfTaken() async {
+    try {
+      final taken = await LocalDb.instance.getBillByNumber(
+        location: _selectedLocation,
+        billNo: _billNo,
+      );
+      if (taken == null || !mounted) {
+        return;
+      }
+      final next = await LocalDb.instance.peekNextBillNoFromBills(
+        _selectedLocation,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _billNo = next);
+    } catch (_) {
+      // Keep current bill number on lookup failure.
+    }
   }
 
   Future<void> _persistSession() async {
@@ -411,7 +457,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Future<void> _loadBillNumber() async {
-    var nextBillNo =
+    await _refreshBillNumberFromDatabase();
+    final nextBillNo =
         await BillRepository.getNextBillNumber(_selectedLocation);
 
     if (!mounted) return;
@@ -871,6 +918,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       if (!result.ok) {
         _showMessage(result.error ?? 'Failed to save bill');
         return;
+      }
+
+      if (result.data != null && result.data != _billNo) {
+        setState(() => _billNo = result.data!);
       }
 
       try {

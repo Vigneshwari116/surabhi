@@ -66,7 +66,7 @@ void main() {
     await AppConfig.clearLocation();
   });
 
-  test('offline save updates existing bill instead of failing duplicate', () async {
+  test('offline save uses next free bill number when number is taken', () async {
     final bill = _sampleBill();
     await LocalDb.instance.insertPendingBill(bill);
 
@@ -74,11 +74,18 @@ void main() {
     final result = await BillRepository.saveBill(updated);
 
     expect(result.ok, isTrue);
+    expect(result.data, 2);
 
     final stored = await LocalDb.instance.getBillByNumber(
       location: 'Surabhi',
-      billNo: 1,
+      billNo: 2,
     );
     expect(stored?.bill.totalAmount, 137);
+
+    final original = await LocalDb.instance.getBillByNumber(
+      location: 'Surabhi',
+      billNo: 1,
+    );
+    expect(original?.bill.totalAmount, 100);
   });
 }

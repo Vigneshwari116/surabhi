@@ -9,6 +9,7 @@ import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
+import 'package:surabhi/services/legacy_pdf_master_groups_service.dart';
 import 'package:surabhi/screen/bill_item.dart';
 
 /// One-time import of legacy sales rows (surabhi_old_sales_import.pdf).
@@ -104,7 +105,7 @@ class OldSalesImportService {
 
     final backupPath = await _backupSalesDatabases();
 
-    await _ensureMasterGroups();
+    await LegacyPdfMasterGroupsService.ensureOnStaffLogin();
 
     var billsImported = 0;
     var billsSkipped = 0;
@@ -240,22 +241,6 @@ class OldSalesImportService {
       totalIgst: totalIgst,
       grandTotal: grandTotal,
     );
-  }
-
-  static Future<void> _ensureMasterGroups() async {
-    final names = await LocalDb.instance.listMasterItemNames();
-    final normalized = names.map((n) => n.toUpperCase()).toSet();
-    for (final required in ['SHIRT', 'T/JEANS']) {
-      if (!normalized.contains(required)) {
-        try {
-          await LocalDb.instance.insertMasterItem(
-            required == 'SHIRT' ? 'Shirt' : 'T/JEANS',
-          );
-        } catch (_) {
-          // Already present with different casing.
-        }
-      }
-    }
   }
 
   static Future<String> _resolveGroupName(String raw) async {
