@@ -1,6 +1,7 @@
 
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -75,10 +76,16 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _customerFieldHeight = 44;
   static const double _customerNameWidth = 220;
   static const double _customerMobileWidth = 170;
-  static const double _topAreaGap = 12;
+  static const double _topAreaGap = 8;
+  static const double _framePadding = 6;
   static const double _compactButtonMinWidth = 140;
-  static const double _tableHeaderHeight = 52;
-  static const double _tableRowHeight = 52;
+  static const double _tableHeaderHeight = 48;
+  static const double _tableRowHeight = 48;
+  static const double _gridFooterHeight = 72;
+  static const double _bottomBarHeight = 60;
+  static const double _desktopChromeEstimate = 392;
+  static const double _gridMinScrollHeight =
+      _tableHeaderHeight + (_tableRowHeight * 2) + _gridFooterHeight + 8;
   static const double _deleteColWidth = 48;
   static const double _gridMinWidthBeforeHScroll = 1000;
   static const int _flexSno = 10;
@@ -1115,14 +1122,21 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     required bool useSidebarLayout,
     required bool mobileBillLayout,
   }) {
+    final hideDesktopTitleBar = !mobileBillLayout;
     final body = mobileBillLayout
         ? _buildMobileBody(context)
-        : _buildDesktopBody();
+        : _buildDesktopBody(
+            context: context,
+            showMenuButton: hideDesktopTitleBar && !widget.embeddedInDashboard,
+            useSidebarLayout: useSidebarLayout,
+          );
 
     if (widget.embeddedInDashboard) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        appBar: sectionHeaderAppBar('SALES BILL'),
+        appBar: hideDesktopTitleBar
+            ? null
+            : sectionHeaderAppBar('SALES BILL'),
         body: _buildLockedBody(body),
       );
     }
@@ -1130,10 +1144,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     if (useSidebarLayout) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        appBar: _buildAppBar(
-          mobileBillLayout: mobileBillLayout,
-          useSidebarLayout: true,
-        ),
+        appBar: hideDesktopTitleBar
+            ? null
+            : _buildAppBar(
+                mobileBillLayout: mobileBillLayout,
+                useSidebarLayout: true,
+              ),
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1159,10 +1175,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           onClose: () => Navigator.pop(context),
         ),
       ),
-      appBar: _buildAppBar(
-        mobileBillLayout: mobileBillLayout,
-        useSidebarLayout: false,
-      ),
+      appBar: hideDesktopTitleBar
+          ? null
+          : _buildAppBar(
+              mobileBillLayout: mobileBillLayout,
+              useSidebarLayout: false,
+            ),
       body: _buildLockedBody(body),
     );
   }
@@ -1237,38 +1255,79 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   double _gridFontSizeForWidth(double width) =>
       width < 1200 ? 20 : _billUiFontSize;
 
-  Widget _buildDesktopBody() {
+  Widget _buildDesktopBody({
+    required BuildContext context,
+    required bool showMenuButton,
+    required bool useSidebarLayout,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final gridFontSize = _gridFontSizeForWidth(constraints.maxWidth);
-        return FocusTraversalGroup(
-          policy: OrderedTraversalPolicy(),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildTopArea(
-                  includeEntryRow: true,
-                  gridFontSize: gridFontSize,
-                ),
-                const SizedBox(height: 6),
+        final fitsFixedLayout = constraints.maxHeight >=
+            _desktopChromeEstimate + _gridMinScrollHeight;
+
+        Widget columnChild({
+          required bool expandGrid,
+          double? gridHeight,
+        }) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTopArea(
+                includeEntryRow: true,
+                gridFontSize: gridFontSize,
+                showMenuButton: showMenuButton,
+                useSidebarLayout: useSidebarLayout,
+                menuContext: context,
+              ),
+              const SizedBox(height: _topAreaGap),
+              if (expandGrid)
                 Expanded(
                   child: _buildDesktopGridZone(
-                    contentWidth: constraints.maxWidth,
+                    gridFontSize: gridFontSize,
+                  ),
+                )
+              else
+                SizedBox(
+                  height: gridHeight ??
+                      math.max(
+                        _gridMinScrollHeight,
+                        constraints.maxHeight - _desktopChromeEstimate,
+                      ),
+                  child: _buildDesktopGridZone(
                     gridFontSize: gridFontSize,
                   ),
                 ),
-                const SizedBox(height: 8),
-                _buildSaveSaleBar(),
-                if (_todaySalesPanelVisible) ...[
-                  const SizedBox(height: 10),
-                  _buildTodaySalesSummary(),
-                ],
-              ],
-            ),
+              const SizedBox(height: _topAreaGap),
+              _buildSaveSaleBar(),
+            ],
+          );
+        }
+
+        final content = FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: fitsFixedLayout
+                ? columnChild(expandGrid: true)
+                : SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: columnChild(
+                        expandGrid: false,
+                        gridHeight: math.max(
+                          _gridMinScrollHeight,
+                          constraints.maxHeight - _desktopChromeEstimate,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         );
+
+        return content;
       },
     );
   }
@@ -1328,7 +1387,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     );
   }
 
-  Widget _buildTodaySalesSummary() {
+  Widget _buildTodaySalesSummary({bool inline = false}) {
     return CompactAbstractSummary(
       amountValue: _formatAmount(_todayAmount),
       gstValue: _formatAmount(_todayGst),
@@ -1336,6 +1395,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       grandTotalValue: _formatAmount(_todayGrandTotal),
       grandTotalLabel: 'Total sales',
       cardWidth: 130,
+      fixedHeight: inline ? _bottomBarHeight : null,
+      forceHorizontalRow: inline,
     );
   }
 
@@ -1363,51 +1424,66 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildSaveSaleBar() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          children: [
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(6),
-              child: SizedBox(
-                height: _entryBoxHeight,
-                child: ElevatedButton(
-                  key: const Key('save_sale_bar_button'),
-                  focusNode: _saveSaleFocus,
-                  onPressed: _saveBill,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.navy,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    minimumSize:
-                        const Size(_compactButtonMinWidth, _entryBoxHeight),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(
-                      fontSize: _billUiFontSize,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
+    return SizedBox(
+      height: _bottomBarHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(6),
+            child: SizedBox(
+              height: _bottomBarHeight,
+              child: ElevatedButton(
+                key: const Key('save_sale_bar_button'),
+                focusNode: _saveSaleFocus,
+                onPressed: _saveBill,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.navy,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize:
+                      const Size(_compactButtonMinWidth, _bottomBarHeight),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                    fontSize: _billUiFontSize,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
                   ),
-                  child: const Text('SAVE SALE'),
+                ),
+                child: const Text('SAVE SALE'),
+              ),
+            ),
+          ),
+          const SizedBox(width: _topAreaGap),
+          Expanded(
+            child: Opacity(
+              opacity: _todaySalesPanelVisible ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !_todaySalesPanelVisible,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildTodaySalesSummary(inline: true),
                 ),
               ),
             ),
-            if (_particularError != null) ...[
-              const SizedBox(width: 12),
-              Text(
+          ),
+          if (_particularError != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
                 _particularError!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppColors.danger,
                   fontSize: AppTextSizes.listSubtitle,
                 ),
               ),
-            ],
+            ),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1481,6 +1557,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   Widget _buildTopArea({
     bool includeEntryRow = false,
     double gridFontSize = _billUiFontSize,
+    bool showMenuButton = false,
+    bool useSidebarLayout = false,
+    BuildContext? menuContext,
   }) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -1494,6 +1573,24 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             alignment: WrapAlignment.start,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (showMenuButton && menuContext != null)
+                IconButton(
+                  icon: Icon(
+                    useSidebarLayout && _sidebarOpen
+                        ? Icons.menu_open
+                        : Icons.menu,
+                  ),
+                  tooltip: useSidebarLayout && _sidebarOpen
+                      ? 'Close menu'
+                      : 'Open menu',
+                  onPressed: () {
+                    if (useSidebarLayout) {
+                      setState(() => _sidebarOpen = !_sidebarOpen);
+                    } else {
+                      Scaffold.maybeOf(menuContext)?.openDrawer();
+                    }
+                  },
+                ),
               Focus(
                 skipTraversal: true,
                 child: _buildTodaySalesButton(),
@@ -1580,18 +1677,20 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           color: AppColors.border,
         ),
       ),
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 118,
-                child: Text('BILL NO:', style: labelStyle),
-              ),
+      padding: const EdgeInsets.all(_framePadding),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 118,
+                  child: Text('BILL NO:', style: labelStyle),
+                ),
               Container(
                 width: 100,
                 height: _entryBoxHeight,
@@ -1682,36 +1781,37 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 118,
-                child: Text('BILL DATE:', style: labelStyle),
-              ),
-              Container(
-                width: 150,
-                height: _entryBoxHeight,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F3F3),
-                  border: Border.all(
-                    color: AppColors.border,
+              ],
+            ),
+            const SizedBox(height: _topAreaGap),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 118,
+                  child: Text('BILL DATE:', style: labelStyle),
+                ),
+                Container(
+                  width: 150,
+                  height: _entryBoxHeight,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F3F3),
+                    border: Border.all(
+                      color: AppColors.border,
+                    ),
+                  ),
+                  child: Text(
+                    '${_billDate.day.toString().padLeft(2, '0')}/'
+                        '${_billDate.month.toString().padLeft(2, '0')}/'
+                        '${_billDate.year}',
+                    style: valueStyle,
                   ),
                 ),
-                child: Text(
-                  '${_billDate.day.toString().padLeft(2, '0')}/'
-                      '${_billDate.month.toString().padLeft(2, '0')}/'
-                      '${_billDate.year}',
-                  style: valueStyle,
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1725,10 +1825,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(_framePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
+        mainAxisSize: MainAxisSize.min,
         children: [
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -2279,7 +2379,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildDesktopGridZone({
-    required double contentWidth,
     required double gridFontSize,
   }) {
     final showTax = _items.isNotEmpty;
@@ -2721,62 +2820,69 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Widget _buildGrandTotalFooter(double gridFontSize) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.headerBand,
-        border: Border(
-          left: BorderSide(color: AppColors.border),
-          right: BorderSide(color: AppColors.border),
-          bottom: BorderSide(color: AppColors.border),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'PCS: ${formatPcs(_totalQty)}',
-            style: TextStyle(
-              fontSize: gridFontSize,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-            ),
+    final words = amountInWords(_grandTotal).toUpperCase();
+    return SizedBox(
+      height: _gridFooterHeight,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.headerBand,
+          border: Border(
+            left: BorderSide(color: AppColors.border),
+            right: BorderSide(color: AppColors.border),
+            bottom: BorderSide(color: AppColors.border),
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    _formatAmount(_grandTotal),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: gridFontSize,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.navy,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'PCS: ${formatPcs(_totalQty)}',
+              style: TextStyle(
+                fontSize: gridFontSize,
+                fontWeight: FontWeight.w700,
+                color: AppColors.navy,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      _formatAmount(_grandTotal),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: gridFontSize,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  amountInWords(_grandTotal),
-                  textAlign: TextAlign.right,
-                  maxLines: 2,
-                  softWrap: true,
-                  overflow: TextOverflow.visible,
-                  style: const TextStyle(
-                    fontSize: AppTextSizes.listSubtitle,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.mutedBlue,
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      words,
+                      maxLines: 1,
+                      softWrap: false,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.mutedBlue,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
