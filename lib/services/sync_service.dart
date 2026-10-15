@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:meta/meta.dart';
 import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/location_reset_service.dart';
@@ -179,13 +180,31 @@ class SyncService with WidgetsBindingObserver {
   }
 
   /// Pull admin edits from the server (admin always wins on conflict).
-  Future<PullResult> pullAdminUpdates(String location) async {
+  ///
+  /// When [automatic] is true (ledger open refresh), skips the first full
+  /// history import when [lastPull] is unset and never runs while
+  /// [AppConfig.offlineOnly] is enabled.
+  Future<PullResult> pullAdminUpdates(
+    String location, {
+    bool automatic = false,
+  }) async {
     if (_autoPullInProgress) {
       return const PullResult(
         ok: false,
         pulledCount: 0,
         error: 'Pull already in progress',
       );
+    }
+
+    if (AppConfig.offlineOnly && automatic) {
+      final lastPull = await LocalDb.instance.getLastPullAt(location);
+      if (lastPull == null) {
+        await LocalDb.instance.setLastPullAt(
+          location,
+          DateTime.now().toUtc(),
+        );
+      }
+      return const PullResult(ok: true, pulledCount: 0);
     }
 
     if (!await (isOnlineOverride?.call() ?? _isOnline())) {
@@ -206,6 +225,14 @@ class SyncService with WidgetsBindingObserver {
     _autoPullInProgress = true;
     try {
       final lastPull = await LocalDb.instance.getLastPullAt(location);
+      if (automatic && lastPull == null) {
+        await LocalDb.instance.setLastPullAt(
+          location,
+          DateTime.now().toUtc(),
+        );
+        return const PullResult(ok: true, pulledCount: 0);
+      }
+
       final since =
           lastPull ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
@@ -397,16 +424,7 @@ class SyncService with WidgetsBindingObserver {
   }
 
   String _locationCodeFromDisplayName(String location) {
-    switch (location) {
-      case 'Win1':
-        return 'win1';
-      case 'Win2':
-        return 'win2';
-      case 'Win3':
-        return 'win3';
-      default:
-        return AppConfig.locationCode;
-    }
+    return locationCodeFromDisplayName(location);
   }
 
   Future<bool> isDeviceOnline() async {

@@ -9,15 +9,15 @@ void main() {
     await LocationResetService.clearPendingForTesting();
   });
 
-  test('win4 is not an active location code', () {
+  test('only main is an active location code', () {
+    expect(isActiveLocationCode('main'), isTrue);
+    expect(isActiveLocationCode('win1'), isFalse);
     expect(isActiveLocationCode('win4'), isFalse);
-    expect(allLocationCodes, ['main', 'main', 'main']);
+    expect(allLocationCodes, ['main']);
   });
 
-  test('branch labels map to the three active locations', () {
-    expect(branchLabelForLocationCode('main'), 'Bommasandra');
-    expect(branchLabelForLocationCode('main'), 'Tippasandra');
-    expect(branchLabelForLocationCode('main'), 'Grabhivapalya');
+  test('branch label maps to Surabhi Exports', () {
+    expect(branchLabelForLocationCode('main'), 'Surabhi Exports');
   });
 
   test('hasPendingServerReset tracks queued location codes', () async {
@@ -25,7 +25,7 @@ void main() {
     await prefs.setStringList('pending_server_reset_locations', ['main']);
 
     expect(await LocationResetService.hasPendingServerReset('main'), isTrue);
-    expect(await LocationResetService.hasPendingServerReset('main'), isFalse);
+    expect(await LocationResetService.hasPendingServerReset('win1'), isFalse);
   });
 
   test('ensureServerResetBeforeSync blocks while offline reset is queued',

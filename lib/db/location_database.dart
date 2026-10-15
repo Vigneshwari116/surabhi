@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -17,8 +18,8 @@ class LocationDatabase {
   static const int schemaVersion = 3;
 
   static Future<String> dbPathForLocationCode(String locationCode) async {
-    final supportDir = await getApplicationSupportDirectory();
-    return join(supportDir.path, '${locationCode.toLowerCase()}_sales.db');
+    SalesDatabase.normalizeLocationCode(locationCode);
+    return SalesDatabase.salesDbPath();
   }
 
   static String displayNameForCode(String locationCode) {
@@ -491,31 +492,19 @@ class LocationDatabase {
         );
     final nextBillNo = maxBillNo + 1;
 
-    final existing = await txn.query(
-      'location_meta',
-      where: 'location = ?',
-      whereArgs: [locationName],
-      limit: 1,
+    await txn.rawInsert(
+      'INSERT OR IGNORE INTO location_meta (location, next_bill_no) VALUES (?, ?)',
+      [locationName, nextBillNo],
     );
 
-    if (existing.isEmpty) {
-      await txn.insert('location_meta', {
-        'location': locationName,
-        'next_bill_no': nextBillNo,
-      });
-      return;
-    }
-
-    final currentNext =
-        (existing.first['next_bill_no'] as num?)?.toInt() ?? 1;
-    if (nextBillNo > currentNext) {
-      await txn.update(
-        'location_meta',
-        {'next_bill_no': nextBillNo},
-        where: 'location = ?',
-        whereArgs: [locationName],
-      );
-    }
+    await txn.rawUpdate(
+      '''
+      UPDATE location_meta
+      SET next_bill_no = MAX(next_bill_no, ?)
+      WHERE location = ?
+      ''',
+      [nextBillNo, locationName],
+    );
   }
 
   static Future<Database> _openWritableDatabase(String path) async {

@@ -49,6 +49,7 @@ class LedgerSummary {
   final double sgst;
   final double igst;
   final double grandTotal;
+  final double totalPcs;
 
   LedgerSummary({
     required this.total,
@@ -56,6 +57,7 @@ class LedgerSummary {
     required this.sgst,
     required this.igst,
     required this.grandTotal,
+    this.totalPcs = 0,
   });
 
   factory LedgerSummary.fromJson(Map<String, dynamic> json) {
@@ -65,6 +67,7 @@ class LedgerSummary {
       sgst: (json['sgst'] as num).toDouble(),
       igst: (json['igst'] as num).toDouble(),
       grandTotal: (json['grandTotal'] as num).toDouble(),
+      totalPcs: (json['totalPcs'] as num?)?.toDouble() ?? 0,
     );
   }
 }

@@ -273,10 +273,19 @@ class ReportRepository {
     if (bill == null || bill.items.isEmpty) {
       return '';
     }
-    return bill.items
-        .map((item) => item.particular.trim())
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final seen = <String>{};
+    final names = <String>[];
+    for (final item in bill.items) {
+      final name = item.particular.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      final key = name.toLowerCase();
+      if (seen.add(key)) {
+        names.add(name.toUpperCase());
+      }
+    }
+    return names.join(', ');
   }
 
   static ReportBillRow _entryToRow(

@@ -66,6 +66,32 @@ void main() {
     expect(months.single.totalAmount, 1500);
   });
 
+  test('applyBillDelta increments pcs totals', () async {
+    final db = SummaryDb.instance;
+    await db.initialize();
+
+    await db.applyBillDelta(
+      location: 'Surabhi',
+      billDate: DateTime(2026, 9, 6),
+      delta: 500,
+      pcsDelta: 12,
+    );
+    await db.applyBillDelta(
+      location: 'Surabhi',
+      billDate: DateTime(2026, 9, 6),
+      delta: 0,
+      pcsDelta: 3,
+    );
+
+    final days = await db.getDayTotalsForMonth(
+      year: 2026,
+      month: 9,
+      location: 'Surabhi',
+    );
+    final day = days.firstWhere((row) => row.day == '2026-09-06');
+    expect(day.totalPcs, 15);
+  });
+
   test('applyBillDelta can subtract on edit/delete', () async {
     final db = SummaryDb.instance;
     await db.initialize();

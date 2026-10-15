@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:surabhi/config/sales_database.dart';
 
 class AppConfig {
   /// Single shop — no server sync or multi-branch.
@@ -13,7 +14,7 @@ class AppConfig {
     if (_locationCode == null) {
       throw StateError('Location not set — user must log in first');
     }
-    return _locationCode!;
+    return SalesDatabase.normalizeLocationCode(_locationCode!);
   }
 
   static String get expectedGstDbName => '${locationCode}_gst';
@@ -45,22 +46,14 @@ class AppConfig {
   }
 
   static Future<void> setLocation(String code) async {
-    final normalized = _normalizeLocationCode(code);
+    final normalized = SalesDatabase.normalizeLocationCode(code);
     var prefs = await SharedPreferences.getInstance();
     await prefs.setString('location_code', normalized);
     _locationCode = normalized;
   }
 
   static String _normalizeLocationCode(String code) {
-    switch (code.trim().toLowerCase()) {
-      case 'win1':
-      case 'win2':
-      case 'win3':
-      case 'win4':
-        return 'main';
-      default:
-        return code.trim().toLowerCase();
-    }
+    return SalesDatabase.normalizeLocationCode(code);
   }
 
   static Future<void> clearLocation() async {

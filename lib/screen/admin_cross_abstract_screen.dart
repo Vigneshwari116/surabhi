@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 /// Admin abstract with per-location filter (or all locations combined).
@@ -165,6 +166,7 @@ class _AdminCrossAbstractScreenState extends State<AdminCrossAbstractScreen> {
                     amountValue:
                         _formatMoney(_summary?.totalSaleAmount ?? 0),
                     gstValue: _formatMoney(_summary?.totalGst ?? 0),
+                    pcsValue: formatPcs(_summary?.totalPcs ?? 0),
                     grandTotalValue: _formatMoney(
                       (_summary?.totalSaleAmount ?? 0) +
                           (_summary?.totalGst ?? 0),

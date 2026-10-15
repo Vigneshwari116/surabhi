@@ -1,14 +1,14 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/location_database.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
@@ -25,16 +25,6 @@ class _FakePathProvider extends Fake
   Future<String?> getApplicationSupportPath() async => root;
 }
 
-const _salesCsv = '''
-BILLNO,DATE,NAME,MOBILE,CASH,CARD/UPI,TOTAL,CGST,SGST,IGST,GRAND TOTAL
-1096,2026-01-17,CASH,,120,0,114,3.0,3.0,0,120
-''';
-
-const _detailCsv = '''
-BillNo,Date,Time,LineNo,Qty,Rate,Amount,Discount%,DiscountAmt,CGSTAmt,SGSTAmt,IGST%,IGSTAmt,TotalAmt,PaymentMode
-1096,17-Jan-26,17:49:51,1,1,120,114,0,0,3,3,5,0,120,CASH
-''';
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tempDir;
@@ -45,22 +35,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', (message) async {
-      final key = const StringCodec().decodeMessage(message);
-      if (key == 'assets/seed/win1_sales.csv') {
-        return const StringCodec().encodeMessage(_salesCsv);
-      }
-      if (key == 'assets/seed/win1_bill_detail.csv') {
-        return const StringCodec().encodeMessage(_detailCsv);
-      }
-      return null;
-    });
   });
 
   tearDownAll(() async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', null);
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
@@ -69,39 +46,28 @@ void main() {
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await AppConfig.clearLocation();
-    for (final code in allLocationCodes) {
-      final file = File('${tempDir.path}/${code}_sales.db');
-      if (await file.exists()) {
-        await file.delete();
-      }
+    final file = File(join(tempDir.path, SalesDatabase.salesDbFileName));
+    if (await file.exists()) {
+      await file.delete();
     }
   });
 
-  test('imports line items linked by bill number', () async {
+  test('bill detail seed is a no-op without bundled CSV import', () async {
     await LocationSeedService.ensureLocationSeeded('main');
     await LocationBillDetailSeedService.ensureLocationSeeded('main');
 
-    final bill = await LocationDatabase.getBillByLocalId(
-      locationCode: 'main',
-      localId: (await LocationDatabase.getLedgerEntries(
-        location: displayNameForLocationCode('main'),
-        from: '2026-01-17',
-        to: '2026-01-17',
-      ))
-          .single
-          .localId,
+    final ledger = await LocationDatabase.getLedgerEntries(
+      location: displayNameForLocationCode('main'),
+      from: '2026-01-17',
+      to: '2026-01-17',
     );
 
-    expect(bill, isNotNull);
-    expect(bill!.items.length, 1);
-    expect(bill.items.first.qty, 1);
-    expect(bill.items.first.rate, 120);
-    expect(bill.grandTotal, 120);
+    expect(ledger, isEmpty);
 
     final hasDetail = await LocationDatabase.dayHasLineItemDetail(
       location: displayNameForLocationCode('main'),
       day: '2026-01-17',
     );
-    expect(hasDetail, isTrue);
+    expect(hasDetail, isFalse);
   });
 }

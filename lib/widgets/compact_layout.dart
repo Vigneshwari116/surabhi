@@ -159,16 +159,26 @@ class CompactAbstractSummary extends StatelessWidget {
   final String amountValue;
   final String gstValue;
   final String grandTotalValue;
+  final String? pcsValue;
   final String grandTotalLabel;
   final double cardWidth;
+  final double? fixedHeight;
+  final bool forceHorizontalRow;
+  final double? labelFontSize;
+  final double? valueFontSize;
 
   const CompactAbstractSummary({
     super.key,
     required this.amountValue,
     required this.gstValue,
     required this.grandTotalValue,
+    this.pcsValue,
     this.grandTotalLabel = 'Grand total',
     this.cardWidth = 148,
+    this.fixedHeight,
+    this.forceHorizontalRow = false,
+    this.labelFontSize,
+    this.valueFontSize,
   });
 
   @override
@@ -178,10 +188,31 @@ class CompactAbstractSummary extends StatelessWidget {
         final parentWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
-        final stackVertically = parentWidth < 520;
+        final cardCount = pcsValue == null ? 3 : 4;
+        final stackVertically =
+            !forceHorizontalRow && parentWidth < 520;
         final effectiveCardWidth = stackVertically
             ? parentWidth
-            : math.min(cardWidth, (parentWidth - 20) / 3);
+            : math.min(cardWidth, (parentWidth - 30) / cardCount);
+
+        final cards = [
+          _statCard('Amount', amountValue, effectiveCardWidth),
+          _statCard('GST', gstValue, effectiveCardWidth),
+          if (pcsValue != null) _statCard('PCS', pcsValue!, effectiveCardWidth),
+          _statCard(grandTotalLabel, grandTotalValue, effectiveCardWidth),
+        ];
+
+        if (forceHorizontalRow) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                cards[i],
+              ],
+            ],
+          );
+        }
 
         return Align(
           alignment: Alignment.topLeft,
@@ -189,11 +220,7 @@ class CompactAbstractSummary extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             direction: stackVertically ? Axis.vertical : Axis.horizontal,
-            children: [
-              _statCard('Amount', amountValue, effectiveCardWidth),
-              _statCard('GST', gstValue, effectiveCardWidth),
-              _statCard(grandTotalLabel, grandTotalValue, effectiveCardWidth),
-            ],
+            children: cards,
           ),
         );
       },
@@ -201,39 +228,47 @@ class CompactAbstractSummary extends StatelessWidget {
   }
 
   Widget _statCard(String label, String value, double width) {
+    final padding = fixedHeight == null
+        ? const EdgeInsets.symmetric(horizontal: 10, vertical: 7)
+        : const EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: labelFontSize ?? AppTextSizes.listSubtitle,
+            fontWeight: FontWeight.w600,
+            color: Colors.black,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: valueFontSize ?? AppTextSizes.fieldText,
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+            height: 1.1,
+          ),
+        ),
+      ],
+    );
+
     return Container(
       width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      height: fixedHeight,
+      padding: padding,
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: AppTextSizes.listSubtitle,
-              fontWeight: FontWeight.w600,
-              color: Colors.black,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: AppTextSizes.fieldText,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-              height: 1.1,
-            ),
-          ),
-        ],
-      ),
+      child: fixedHeight == null ? content : content,
     );
   }
 }

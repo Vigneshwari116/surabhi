@@ -11,6 +11,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -31,7 +32,7 @@ const _testLocationName = 'Surabhi';
 
 Future<String> _testDbPath() async {
   final dir = await getApplicationSupportDirectory();
-  return p.join(dir.path, '${_testLocationCode}_sales.db');
+  return p.join(dir.path, SalesDatabase.salesDbFileName);
 }
 
 Future<void> _deleteTestDb() async {
@@ -150,6 +151,43 @@ void main() {
       expect(parsed.length, 1);
       expect(parsed.first.qty, 3);
       expect(parsed.first.rate, 75.5);
+    });
+
+    test('parallel location_meta initialization is idempotent and preserves sequence',
+        () async {
+      final db = LocalDb.instance;
+      await db.initialize();
+
+      await Future.wait(
+        List.generate(
+          100,
+          (_) => db.getNextBillNumber(_testLocationName),
+        ),
+      );
+
+      final sqlite = await db.database;
+      final rowCount = Sqflite.firstIntValue(
+        await sqlite.rawQuery(
+          'SELECT COUNT(*) FROM location_meta WHERE location = ?',
+          [_testLocationName],
+        ),
+      );
+      expect(rowCount, 1);
+      expect(await db.getNextBillNumber(_testLocationName), 1);
+
+      await sqlite.update(
+        'location_meta',
+        {'next_bill_no': 99},
+        where: 'location = ?',
+        whereArgs: [_testLocationName],
+      );
+
+      await Future.wait([
+        for (var i = 0; i < 50; i++) db.getNextBillNumber(_testLocationName),
+        for (var i = 0; i < 50; i++) db.getLastPullAt(_testLocationName),
+      ]);
+
+      expect(await db.getNextBillNumber(_testLocationName), 99);
     });
 
     test('getNextBillNumber advances after insertBill', () async {
@@ -344,6 +382,29 @@ void main() {
       expect(stored.syncStatus, 'synced');
     });
 
+    test('applyPulledBills does not resurrect locally soft-deleted bills', () async {
+      final db = LocalDb.instance;
+      await db.initialize();
+
+      final localId = await db.insertBill(
+        SaleBill.fromJson(_sampleBillJson()),
+        syncStatus: 'synced',
+      );
+      await db.markBillDeleted(localId);
+
+      final pulled = SaleBill.fromJson({
+        ..._sampleBillJson(),
+        'customerName': 'Server Resurrected',
+      });
+
+      final applied = await db.applyPulledBills([pulled]);
+
+      expect(applied, 0);
+
+      final entries = await db.getLedgerEntries(_testLocationName);
+      expect(entries, isEmpty);
+    });
+
     test('applyPulledBills applies server-side soft delete', () async {
       final db = LocalDb.instance;
       await db.initialize();
@@ -529,5 +590,18 @@ void main() {
 
       await inspection.close();
     });
+  });
+
+  test('groupSummaryFromItemsJson lists distinct groups in order', () {
+    final items = jsonEncode([
+      {'particular': 'shirt', 'qty': 1, 'rate': 100},
+      {'particular': 'Shirt', 'qty': 2, 'rate': 200},
+      {'particular': 'pant', 'qty': 1, 'rate': 300},
+    ]);
+
+    expect(
+      LocalDb.groupSummaryFromItemsJson(items),
+      'SHIRT, PANT',
+    );
   });
 }

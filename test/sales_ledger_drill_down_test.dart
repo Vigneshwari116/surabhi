@@ -25,6 +25,7 @@ LocalLedgerEntry _sampleLedgerEntry() {
     sgst: 2.5,
     igst: 0,
     grandTotal: 105,
+    pcs: 1,
     syncStatus: 'synced',
   );
 }
