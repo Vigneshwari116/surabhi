@@ -6,6 +6,8 @@ import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 import 'package:surabhi/services/session_service.dart';
+import 'package:surabhi/services/legacy_pdf_master_groups_service.dart';
+import 'package:surabhi/services/old_sales_import_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 
 class AppSessionService {
@@ -34,6 +36,8 @@ class AppSessionService {
       );
       await SummaryDb.instance.initialize();
       await SummaryDb.instance.ensureBootstrapped();
+      await LegacyPdfMasterGroupsService.ensureOnStaffLogin();
+      await OldSalesImportService.runOnceIfNeeded();
     } catch (_) {
       // Login must succeed even if the local database is temporarily unavailable.
     }

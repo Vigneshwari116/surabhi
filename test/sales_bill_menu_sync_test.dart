@@ -128,7 +128,7 @@ void main() {
     expect(find.text('ABSTRACT'), findsNothing);
     expect(find.text('PRINTER SETTINGS'), findsNothing);
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 11));
   });
 
   testWidgets('ledger menu navigation works while manual push is in progress',
@@ -150,6 +150,6 @@ void main() {
     expect(find.byType(SalesLedgerScreen), findsOneWidget);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 11));
   });
 }

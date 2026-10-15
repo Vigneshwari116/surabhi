@@ -6,7 +6,6 @@ import 'package:surabhi/screen/login_screen.dart';
 import 'package:surabhi/screen/sales_abstract_screen.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/screen/sales_ledger_screen.dart';
-import 'package:surabhi/screen/master_screen.dart';
 import 'package:surabhi/screen/staff_sales_dashboard_screen.dart';
 import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
@@ -21,7 +20,6 @@ import 'package:surabhi/widgets/compact_layout.dart';
 enum _StaffSection {
   dashboard,
   bill,
-  master,
   abstract,
   ledger,
   printer,
@@ -85,8 +83,6 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
         return 'DASHBOARD';
       case _StaffSection.bill:
         return 'BILL';
-      case _StaffSection.master:
-        return 'MASTER';
       case _StaffSection.abstract:
         return 'ABSTRACT';
       case _StaffSection.ledger:
@@ -104,8 +100,6 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
         return Icons.dashboard_outlined;
       case _StaffSection.bill:
         return Icons.receipt_long_outlined;
-      case _StaffSection.master:
-        return Icons.inventory_2_outlined;
       case _StaffSection.abstract:
         return Icons.summarize_outlined;
       case _StaffSection.ledger:
@@ -130,7 +124,6 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
           isSectionActive: _selectedSection == _StaffSection.bill,
           ledgerScreenBuilder: widget.ledgerScreenBuilder,
         ),
-        const MasterScreen(),
         SalesAbstractScreen(
           location: _location,
           refreshGeneration: _refreshGeneration,

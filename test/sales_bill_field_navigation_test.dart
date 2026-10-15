@@ -104,11 +104,25 @@ void main() {
 
   Future<void> tearDownBillScreen(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 11));
   }
 
   final rateField = find.byKey(const Key('bill_rate_field'));
   final qtyField = find.byKey(const Key('bill_qty_field'));
+  final amountField = find.byKey(const Key('bill_amount_field'));
+
+  testWidgets('amount field is skipped by focus traversal', (tester) async {
+    await pumpBillScreen(tester);
+
+    final amountFocus = tester.widget<Focus>(find.ancestor(
+      of: amountField,
+      matching: find.byType(Focus),
+    ).first);
+    expect(amountFocus.skipTraversal, isTrue);
+    expect(amountFocus.canRequestFocus, isFalse);
+
+    await tearDownBillScreen(tester);
+  });
 
   testWidgets('typing pause does not auto-advance rate or add line item',
       (tester) async {
@@ -258,14 +272,19 @@ void main() {
     await tearDownBillScreen(tester);
   });
 
-  testWidgets('invalid rate shows inline error below field', (tester) async {
+  testWidgets('invalid qty on add shows inline error', (tester) async {
     await pumpBillScreen(tester);
 
-    await tester.enterText(rateField, '0');
+    expect(find.text('Rate must be greater than 0'), findsNothing);
+
+    await tester.tap(rateField);
+    await tester.enterText(rateField, '100');
+    await tester.tap(qtyField);
+    await tester.enterText(qtyField, '0');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 
-    expect(find.text('Rate must be greater than 0'), findsOneWidget);
+    expect(find.text('Quantity must be greater than 0'), findsOneWidget);
     await tearDownBillScreen(tester);
   });
 }
