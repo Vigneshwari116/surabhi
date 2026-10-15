@@ -73,14 +73,10 @@ void main() {
     await AppConfig.clearLocation();
   });
 
-  testWidgets('sales bill desktop layout has no overflow at 1366x768 with 3 items',
-      (tester) async {
-    final items = [
-      BillItem(particular: 'RICE', qty: 2, rate: 100),
-      BillItem(particular: 'WHEAT FLOUR', qty: 1, rate: 250),
-      BillItem(particular: 'SUGAR', qty: 3, rate: 45.5),
-    ];
-
+  Future<void> pumpSalesBillDesktop(
+    WidgetTester tester, {
+    required List<BillItem> items,
+  }) async {
     await SessionService.saveBillSession(
       location: AppConfig.displayLocationName,
       billNo: 1,
@@ -106,15 +102,54 @@ void main() {
     for (var i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (find.text('BILL NO:').evaluate().isNotEmpty &&
-          find.text('PCS:').evaluate().isNotEmpty) {
+          find.textContaining('PCS:').evaluate().isNotEmpty) {
         break;
       }
     }
 
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('sales bill desktop layout has no overflow at 1366x768 with 3 items',
+      (tester) async {
+    final items = [
+      BillItem(particular: 'RICE', qty: 2, rate: 100),
+      BillItem(particular: 'WHEAT FLOUR', qty: 1, rate: 250),
+      BillItem(particular: 'SUGAR', qty: 3, rate: 45.5),
+    ];
+
+    await pumpSalesBillDesktop(tester, items: items);
 
     expect(find.text('BILL NO:'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill desktop layout has no overflow with Today Sales panel visible',
+      (tester) async {
+    final items = [
+      BillItem(particular: 'RICE', qty: 2, rate: 100),
+      BillItem(particular: 'WHEAT FLOUR', qty: 1, rate: 250),
+      BillItem(particular: 'SUGAR', qty: 3, rate: 45.5),
+    ];
+
+    await pumpSalesBillDesktop(tester, items: items);
+
+    await tester.tap(find.byKey(const Key('today_sales_button')));
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.byKey(const Key('today_sales_panel')).evaluate().isNotEmpty) {
+        break;
+      }
+    }
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('today_sales_panel')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();
