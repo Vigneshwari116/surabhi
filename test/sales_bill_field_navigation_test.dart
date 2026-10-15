@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -104,7 +105,7 @@ void main() {
 
   Future<void> tearDownBillScreen(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 11));
   }
 
   final rateField = find.byKey(const Key('bill_rate_field'));
@@ -161,14 +162,24 @@ void main() {
     await tearDownBillScreen(tester);
   });
 
-  testWidgets('enter on qty adds line item without saving', (tester) async {
+  testWidgets('enter on amount adds line item without saving', (tester) async {
     await pumpBillScreen(tester);
+
+    final amountField = find.byKey(const Key('bill_amount_field'));
 
     await tester.tap(rateField);
     await tester.enterText(rateField, '100');
     await tester.tap(qtyField);
     await tester.enterText(qtyField, '2');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(amountField);
+    await tester.pump();
+    expect(tester.widget<TextField>(amountField).focusNode?.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 

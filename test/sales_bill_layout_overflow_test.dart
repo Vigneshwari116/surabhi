@@ -102,7 +102,7 @@ void main() {
     for (var i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (find.text('BILL NO:').evaluate().isNotEmpty &&
-          find.textContaining('PCS:').evaluate().isNotEmpty &&
+          find.text('Grand total').evaluate().isNotEmpty &&
           find.byIcon(Icons.close).evaluate().length >= items.length) {
         break;
       }
