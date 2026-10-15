@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
@@ -13,14 +14,16 @@ import 'package:surabhi/services/location_seed_service.dart';
 class AbstractSummary {
   final double totalSaleAmount;
   final double totalGst;
+  final double totalPcs;
 
   AbstractSummary({
     required this.totalSaleAmount,
     required this.totalGst,
+    required this.totalPcs,
   });
 
   static AbstractSummary zero() =>
-      AbstractSummary(totalSaleAmount: 0, totalGst: 0);
+      AbstractSummary(totalSaleAmount: 0, totalGst: 0, totalPcs: 0);
 }
 
 class AbstractRepository {
@@ -51,17 +54,20 @@ class AbstractRepository {
 
       var totalSaleAmount = 0.0;
       var totalGst = 0.0;
+      var totalPcs = 0.0;
 
       for (final row in rows) {
         final totals = _totalsForRow(row, fromKey: fromKey, toKey: toKey);
         if (totals == null) continue;
         totalSaleAmount += totals.$1;
         totalGst += totals.$2;
+        totalPcs += totals.$3;
       }
 
       return AbstractSummary(
         totalSaleAmount: totalSaleAmount,
         totalGst: totalGst,
+        totalPcs: totalPcs,
       );
     } catch (_) {
       return AbstractSummary.zero();
@@ -74,6 +80,7 @@ class AbstractRepository {
   }) async {
     var totalSale = 0.0;
     var totalGst = 0.0;
+    var totalPcs = 0.0;
 
     for (final code in allLocationCodes) {
       final summary = await getSummaryForLocationCode(
@@ -83,11 +90,13 @@ class AbstractRepository {
       );
       totalSale += summary.totalSaleAmount;
       totalGst += summary.totalGst;
+      totalPcs += summary.totalPcs;
     }
 
     return AbstractSummary(
       totalSaleAmount: totalSale,
       totalGst: totalGst,
+      totalPcs: totalPcs,
     );
   }
 
@@ -109,6 +118,7 @@ class AbstractRepository {
                 'total_cgst': entry.totalCgst,
                 'total_sgst': entry.totalSgst,
                 'total_igst': entry.totalIgst,
+                'total_qty': entry.totalQty,
               },
             )
             .toList(growable: false);
@@ -117,8 +127,7 @@ class AbstractRepository {
       }
     }
 
-    final supportDir = await getApplicationSupportDirectory();
-    final dbPath = join(supportDir.path, '${locationCode}_sales.db');
+    final dbPath = await SalesDatabase.salesDbPath();
     if (await File(dbPath).exists()) {
       return _readBillsFromLocationFile(
         locationCode: locationCode,
@@ -133,8 +142,7 @@ class AbstractRepository {
     required String locationCode,
     required String locationName,
   }) async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
     final file = File(path);
     if (!await file.exists()) {
       return const [];
@@ -159,6 +167,7 @@ class AbstractRepository {
           'total_cgst',
           'total_sgst',
           'total_igst',
+          'total_qty',
         ],
       );
     } finally {
@@ -166,7 +175,7 @@ class AbstractRepository {
     }
   }
 
-  static (double, double)? _totalsForRow(
+  static (double, double, double)? _totalsForRow(
     Map<String, dynamic> row, {
     required String fromKey,
     required String toKey,
@@ -183,8 +192,9 @@ class AbstractRepository {
     final cgst = (row['total_cgst'] as num?)?.toDouble() ?? 0;
     final sgst = (row['total_sgst'] as num?)?.toDouble() ?? 0;
     final igst = (row['total_igst'] as num?)?.toDouble() ?? 0;
+    final pcs = (row['total_qty'] as num?)?.toDouble() ?? 0;
 
-    return (saleAmount, cgst + sgst + igst);
+    return (saleAmount, cgst + sgst + igst, pcs);
   }
 
   static String _formatDate(DateTime date) {

@@ -1,5 +1,7 @@
 /// Single-location Surabhi Exports (offline).
-const List<String> allLocationCodes = ['main'];
+const String activeSalesLocationCode = 'main';
+
+const List<String> allLocationCodes = [activeSalesLocationCode];
 
 const String businessDisplayName = 'SURABHI EXPORTS';
 

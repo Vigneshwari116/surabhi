@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -53,7 +54,7 @@ SaleBill _pendingBill(int billNo) {
 
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
-  final file = File('${dir.path}/${_testLocationCode}_sales.db');
+  final file = File('${dir.path}/${SalesDatabase.salesDbFileName}');
   if (await file.exists()) {
     await file.delete();
   }
@@ -282,6 +283,36 @@ void main() {
         location: _testLocationName,
       );
       expect(stillPending, isEmpty);
+    });
+  });
+
+  group('pullAdminUpdates automatic policy', () {
+    test('automatic pull skips initial full import when lastPull is unset',
+        () async {
+      final db = LocalDb.instance;
+      await db.initialize();
+
+      final sync = SyncService.instance;
+      sync.isOnlineOverride = () async => true;
+      var fetchCalls = 0;
+      sync.getBillUpdatesSinceOverride =
+          ({required location, required since}) async {
+        fetchCalls++;
+        return SalesApiResult.success((
+          bills: <SaleBill>[],
+          serverTime: DateTime.now().toUtc(),
+        ));
+      };
+
+      final result = await sync.pullAdminUpdates(
+        _testLocationName,
+        automatic: true,
+      );
+
+      expect(result.ok, isTrue);
+      expect(result.pulledCount, 0);
+      expect(fetchCalls, 0);
+      expect(await db.getLastPullAt(_testLocationName), isNotNull);
     });
   });
 

@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
+import 'package:surabhi/utils/qty_format.dart';
 
 class LedgerPdfService {
   static Future<String> saveLedgerPdf({
@@ -101,11 +102,12 @@ class LedgerPdfService {
               'NAME',
               'GROUP',
               'MOBILE',
+              'PCS',
               'CASH',
               'CARD/UPI',
               'TOTAL',
               'GST',
-              'GRAND TOTAL',
+              'GRAND\nTOTAL',
             ],
             data: [
               for (final entry in entries)
@@ -115,6 +117,7 @@ class LedgerPdfService {
                   entry.customerName,
                   entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
                   entry.mobile.isEmpty ? '—' : entry.mobile,
+                  formatPcs(entry.pcs),
                   _cashColumnAmount(entry),
                   _cardColumnAmount(entry),
                   money.format(entry.total),
@@ -127,6 +130,7 @@ class LedgerPdfService {
                 '',
                 '',
                 '',
+                formatPcs(summary.totalPcs),
                 money.format(_cashTotal(entries)),
                 money.format(_cardTotal(entries)),
                 money.format(summary.total),

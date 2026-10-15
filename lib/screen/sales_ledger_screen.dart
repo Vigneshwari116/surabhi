@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/repositories/day_drill_down_repository.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
-import 'package:surabhi/screen/admin_day_bills_screen.dart';
 import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 class SalesLedgerScreen extends StatefulWidget {
@@ -46,13 +45,12 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 960;
+  static const double _tableMinWidth = 1040;
 
   bool _loading = true;
   bool _pulling = false;
   bool _exportingPdf = false;
   List<LocalLedgerEntry> _entries = [];
-  List<DaySummaryRow> _daySummaries = const [];
   LedgerSummary? _summary;
   DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
@@ -85,33 +83,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         '${date.day.toString().padLeft(2, '0')}';
   }
 
-  bool get _isMultiDayRange {
-    if (!_customRange) {
-      return false;
-    }
-    return _fromKey != _toKey;
-  }
-
   Future<void> _loadLedger() async {
     setState(() => _loading = true);
-
-    if (_isMultiDayRange) {
-      final days = await DayDrillDownRepository.getDaySummaries(
-        fromDate: _fromDate,
-        toDate: _toDate,
-        location: widget.location,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _daySummaries = days;
-        _entries = const [];
-        _summary = null;
-        _loading = false;
-      });
-      return;
-    }
 
     final ({
       List<LocalLedgerEntry> entries,
@@ -133,32 +106,17 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     setState(() {
       _entries = result.entries;
       _summary = result.summary;
-      _daySummaries = const [];
       _loading = false;
     });
-  }
-
-  Future<void> _openDay(DaySummaryRow row) async {
-    if (!row.hasLineItemDetail) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AdminDayBillsScreen(
-          day: row.day,
-          title: row.label,
-          location: widget.location,
-          adminFullEdit: widget.adminFullEdit,
-        ),
-      ),
-    );
   }
 
   Future<void> _pullInBackground({bool showFeedback = false}) async {
     setState(() => _pulling = true);
 
-    final result = await SyncService.instance.pullAdminUpdates(widget.location);
+    final result = await SyncService.instance.pullAdminUpdates(
+      widget.location,
+      automatic: true,
+    );
 
     if (!mounted) return;
 
@@ -394,9 +352,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: _isMultiDayRange
-                      ? _buildDaySummaryList()
-                      : _entries.isEmpty
+                  child: _entries.isEmpty
                           ? _buildEmptyState()
                           : CenteredContent(
                           maxWidth: 1100,
@@ -426,81 +382,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _buildDaySummaryList() {
-    if (_daySummaries.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      itemCount: _daySummaries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final row = _daySummaries[index];
-        final canDrill = row.hasLineItemDetail;
-
-        return Material(
-          color: AppColors.cardWhite,
-          borderRadius: BorderRadius.circular(6),
-          child: InkWell(
-            onTap: canDrill ? () => _openDay(row) : null,
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          row.label,
-                          style: const TextStyle(
-                            fontSize: AppTextSizes.listTitle,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                        if (!canDrill)
-                          const Text(
-                            'Grand total only',
-                            style: TextStyle(
-                              fontSize: AppTextSizes.listSubtitle,
-                              color: AppColors.mutedBlue,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    _formatMoney(row.grandTotal),
-                    style: const TextStyle(
-                      fontSize: AppTextSizes.listTitle,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                  if (canDrill) ...[
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: AppColors.mutedBlue,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -567,11 +448,18 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('NAME', flex: 9, bold: true),
           _cell('GROUP', flex: 7, bold: true),
           _cell('MOBILE', flex: 7, bold: true),
+          _cell('PCS', flex: 5, bold: true, alignRight: true, minWidth: 56),
           _cell('CASH', flex: 7, bold: true, alignRight: true),
           _cell('CARD/UPI', flex: 7, bold: true, alignRight: true),
           _cell('TOTAL', flex: 7, bold: true, alignRight: true),
           _cell('GST', flex: 6, bold: true, alignRight: true),
-          _cell('GRAND TOTAL', flex: 8, bold: true, alignRight: true),
+          _cell(
+            'GRAND\nTOTAL',
+            flex: 10,
+            bold: true,
+            alignRight: true,
+            minWidth: 96,
+          ),
         ],
       ),
     );
@@ -591,13 +479,14 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
             flex: 7,
           ),
           _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
+          _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: true),
               flex: 7, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: false),
               flex: 7, alignRight: true),
           _cell(_formatMoney(entry.total), flex: 7, alignRight: true),
           _cell(_formatMoney(_entryGst(entry)), flex: 6, alignRight: true),
-          _cell(_formatMoney(entry.grandTotal), flex: 8, alignRight: true),
+          _cell(_formatMoney(entry.grandTotal), flex: 10, alignRight: true),
         ],
       ),
     );
@@ -615,6 +504,12 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('', flex: 9, bold: true),
           _cell('', flex: 7, bold: true),
           _cell('', flex: 7, bold: true),
+          _cell(
+            formatPcs(summary.totalPcs),
+            flex: 5,
+            bold: true,
+            alignRight: true,
+          ),
           _cell(_formatMoney(payTotals.cash),
               flex: 7, bold: true, alignRight: true),
           _cell(_formatMoney(payTotals.card),
@@ -624,7 +519,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell(_formatMoney(_summaryGst(summary)),
               flex: 6, bold: true, alignRight: true),
           _cell(_formatMoney(summary.grandTotal),
-              flex: 8, bold: true, alignRight: true),
+              flex: 10, bold: true, alignRight: true),
         ],
       ),
     );
@@ -635,25 +530,31 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     required int flex,
     bool bold = false,
     bool alignRight = false,
+    double? minWidth,
   }) {
     return Expanded(
       flex: flex,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-        decoration: const BoxDecoration(
-          border: Border(
-            right: BorderSide(color: AppColors.border, width: 0.6),
-            bottom: BorderSide(color: AppColors.border, width: 0.6),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: minWidth ?? 0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+          decoration: const BoxDecoration(
+            border: Border(
+              right: BorderSide(color: AppColors.border, width: 0.6),
+              bottom: BorderSide(color: AppColors.border, width: 0.6),
+            ),
           ),
-        ),
-        child: Text(
-          text,
-          textAlign: alignRight ? TextAlign.right : TextAlign.left,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: AppTextSizes.tableRowText,
-            fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-            color: AppColors.navy,
+          child: Text(
+            text,
+            textAlign: alignRight ? TextAlign.right : TextAlign.left,
+            maxLines: bold ? 2 : 1,
+            softWrap: bold,
+            overflow: TextOverflow.visible,
+            style: TextStyle(
+              fontSize: AppTextSizes.tableRowText,
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              color: AppColors.navy,
+            ),
           ),
         ),
       ),

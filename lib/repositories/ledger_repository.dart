@@ -22,6 +22,7 @@ class LocalLedgerEntry {
   final double sgst;
   final double igst;
   final double grandTotal;
+  final double pcs;
   final String syncStatus;
   final String groupSummary;
 
@@ -38,6 +39,7 @@ class LocalLedgerEntry {
     required this.sgst,
     required this.igst,
     required this.grandTotal,
+    required this.pcs,
     required this.syncStatus,
     this.groupSummary = '',
   });
@@ -75,6 +77,7 @@ class LedgerRepository {
               sgst: row.totalSgst,
               igst: row.totalIgst,
               grandTotal: row.grandTotal,
+              pcs: row.totalQty,
               syncStatus: row.syncStatus,
               groupSummary: row.groupSummary,
             ),
@@ -94,6 +97,7 @@ class LedgerRepository {
           sgst: 0,
           igst: 0,
           grandTotal: 0,
+          totalPcs: 0,
         ),
       );
     }
@@ -140,6 +144,7 @@ class LedgerRepository {
     var sgst = 0.0;
     var igst = 0.0;
     var grandTotal = 0.0;
+    var totalPcs = 0.0;
 
     for (var entry in entries) {
       total += entry.total;
@@ -147,6 +152,7 @@ class LedgerRepository {
       sgst += entry.sgst;
       igst += entry.igst;
       grandTotal += entry.grandTotal;
+      totalPcs += entry.pcs;
     }
 
     return LedgerSummary(
@@ -155,6 +161,7 @@ class LedgerRepository {
       sgst: sgst,
       igst: igst,
       grandTotal: grandTotal,
+      totalPcs: totalPcs,
     );
   }
 }
