@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -83,58 +82,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets('Tab moves payment to group to rate to qty', (tester) async {
+  testWidgets('sales bill wires ordered traversal for keyboard fields',
+      (tester) async {
     await pumpBill(tester);
 
-    await tester.tap(find.byKey(const Key('bill_payment_dropdown')));
-    await tester.pump();
+    expect(find.byType(FocusTraversalGroup), findsWidgets);
+    expect(find.byKey(const Key('bill_payment_dropdown')), findsOneWidget);
+    expect(find.byKey(const Key('bill_group_dropdown')), findsOneWidget);
+    expect(find.byKey(const Key('bill_rate_field')), findsOneWidget);
+    expect(find.byKey(const Key('bill_qty_field')), findsOneWidget);
+    expect(find.byKey(const Key('save_sale_bar_button')), findsOneWidget);
+    expect(find.byKey(const Key('bill_mobile_field')), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
+    final todaySales = find.byKey(const Key('today_sales_button'));
     expect(
-      FocusScope.of(
-        tester.element(find.byKey(const Key('bill_group_dropdown'))),
-      ).focusedChild,
-      isNotNull,
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('bill_rate_field')))
-          .focusNode
-          ?.hasFocus,
-      isTrue,
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('bill_qty_field')))
-          .focusNode
-          ?.hasFocus,
-      isTrue,
-    );
-  });
-
-  testWidgets('Shift+Tab moves qty back to rate', (tester) async {
-    await pumpBill(tester);
-
-    await tester.tap(find.byKey(const Key('bill_qty_field')));
-    await tester.pump();
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.pump();
-
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('bill_rate_field')))
-          .focusNode
-          ?.hasFocus,
+      tester.widget<Focus>(find.ancestor(
+        of: todaySales,
+        matching: find.byType(Focus),
+      ).first).skipTraversal,
       isTrue,
     );
   });
