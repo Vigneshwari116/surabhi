@@ -64,25 +64,23 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   static const Color billNoColor = Color(0xFF7FE8E8);
-  static const double _groupBoxWidth = 184;
-  static const double _numericBoxWidth = 116;
-  static const double _entryBoxHeight = 48;
-  static const double _customerPanelWidth = 248;
+
+  /// Bill screen typography — local only; other screens stay on [AppTextSizes].
+  static const double _billUiFontSize = 22;
+
+  static const double _groupBoxWidth = 280;
+  static const double _numericBoxWidth = 140;
+  static const double _entryBoxHeight = 56;
+  static const double _customerPanelWidth = 290;
   static const double _topAreaGap = 12;
-  static const double _compactButtonMinWidth = 118;
-  static const int _flexSno = 48;
-  static const int _flexGroup = 100;
-  static const int _flexRate = 72;
-  static const int _flexQty = 56;
-  static const int _flexAmount = 88;
-  static const int _flexLineTotal = 100;
-  static const int _flexCgst = 80;
-  static const int _flexSgst = 80;
-  static const int _flexIgst = 72;
-  static const double _tableRowHeight = 40;
-  static const double _tableHeaderFontSize = 15;
-  static const double _tableCellFontSize = 15;
-  static const double _deleteColWidth = 34;
+  static const double _compactButtonMinWidth = 140;
+  static const double _colSno = 70;
+  static const double _colGroup = 280;
+  static const double _colNumeric = 140;
+  static const double _colTax = 110;
+  static const double _tableHeaderHeight = 56;
+  static const double _tableRowHeight = 52;
+  static const double _deleteColWidth = 56;
   static const double _desktopBreakpoint = 900;
   static const double _sidebarBreakpoint = 700;
   static const double _sidebarWidth = 200;
@@ -480,7 +478,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           minimumSize: const Size(_compactButtonMinWidth, _entryBoxHeight),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           textStyle: const TextStyle(
-            fontSize: AppTextSizes.buttonText,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1269,7 +1267,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           minimumSize: const Size(_compactButtonMinWidth, _entryBoxHeight),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           textStyle: const TextStyle(
-            fontSize: AppTextSizes.buttonText,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1314,10 +1312,26 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   Widget _buildSaveSaleBar() {
     return Row(
       children: [
-        CompactSaveButton(
-          buttonKey: const Key('save_sale_bar_button'),
-          label: 'SAVE SALE',
-          onPressed: _saveBill,
+        SizedBox(
+          height: _entryBoxHeight,
+          child: ElevatedButton(
+            key: const Key('save_sale_bar_button'),
+            onPressed: _saveBill,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.navy,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(_compactButtonMinWidth, _entryBoxHeight),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: const TextStyle(
+                fontSize: _billUiFontSize,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+            child: const Text('SAVE SALE'),
+          ),
         ),
         if (_particularError != null) ...[
           const SizedBox(width: 12),
@@ -1398,22 +1412,15 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   Widget _buildTopArea() {
-    // Wrap keeps the bill header left-aligned without overflow on narrow windows.
     return Align(
       alignment: Alignment.centerLeft,
-      child: Wrap(
-        spacing: _topAreaGap,
-        runSpacing: _topAreaGap,
-        crossAxisAlignment: WrapCrossAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildBillDetails(),
-          SizedBox(
-            width: _customerPanelWidth,
-            child: _buildCustomerDetails(),
-          ),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: _topAreaGap,
+            runSpacing: _topAreaGap,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _buildTodaySalesButton(),
@@ -1424,6 +1431,19 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               _buildBillNavButton(
                 label: 'NEXT',
                 onPressed: _goToNextBill,
+              ),
+            ],
+          ),
+          const SizedBox(height: _topAreaGap),
+          Wrap(
+            spacing: _topAreaGap,
+            runSpacing: _topAreaGap,
+            crossAxisAlignment: WrapCrossAlignment.start,
+            children: [
+              _buildBillDetails(),
+              SizedBox(
+                width: _customerPanelWidth,
+                child: _buildCustomerDetails(),
               ),
             ],
           ),
@@ -1438,12 +1458,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildBillDetails() {
     const labelStyle = TextStyle(
-      fontSize: AppTextSizes.fieldLabel,
+      fontSize: _billUiFontSize,
       color: Colors.black,
       fontWeight: FontWeight.w600,
     );
     const valueStyle = TextStyle(
-      fontSize: AppTextSizes.fieldText,
+      fontSize: _billUiFontSize,
       color: Colors.black,
     );
 
@@ -1462,11 +1482,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(
-                width: 96,
+                width: 118,
                 child: Text('BILL NO:', style: labelStyle),
               ),
               Container(
-                width: 88,
+                width: 100,
                 height: _entryBoxHeight,
                 alignment: Alignment.center,
                 decoration: const BoxDecoration(
@@ -1482,7 +1502,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ),
               const SizedBox(width: 8),
               SizedBox(
-                width: 132,
+                width: 150,
                 height: _entryBoxHeight,
                 child: DropdownButtonFormField<String>(
                   value: _paymentMode,
@@ -1494,7 +1514,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                     border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 10,
+                      vertical: 14,
                     ),
                   ),
                   icon: Icon(
@@ -1502,7 +1522,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                     color: _paymentTextColor(_paymentMode),
                   ),
                   style: TextStyle(
-                    fontSize: AppTextSizes.fieldText,
+                    fontSize: _billUiFontSize,
                     color: _paymentTextColor(_paymentMode),
                     fontWeight: FontWeight.w600,
                   ),
@@ -1515,7 +1535,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                             child: Text(
                               mode,
                               style: TextStyle(
-                                fontSize: AppTextSizes.fieldText,
+                                fontSize: _billUiFontSize,
                                 color: _paymentTextColor(_paymentMode),
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1530,7 +1550,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                       child: Text(
                         item,
                         style: const TextStyle(
-                          fontSize: AppTextSizes.fieldText,
+                          fontSize: _billUiFontSize,
                           color: Colors.black,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1557,11 +1577,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(
-                width: 96,
+                width: 118,
                 child: Text('BILL DATE:', style: labelStyle),
               ),
               Container(
-                width: 132,
+                width: 150,
                 height: _entryBoxHeight,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
@@ -1599,16 +1619,16 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Customer Details',
+            'CUSTOMER DETAILS',
             style: TextStyle(
-              fontSize: AppTextSizes.fieldLabel,
+              fontSize: _billUiFontSize,
               fontWeight: FontWeight.bold,
               color: Colors.black,
             ),
           ),
           const SizedBox(height: 4),
           _buildLabeledCustomerField(
-            label: 'Name',
+            label: 'NAME',
             child: _smallTextField(
               _customerNameController,
               focusNode: _nameFocus,
@@ -1637,8 +1657,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Password',
-                    style: TextStyle(fontSize: AppTextSizes.fieldLabel),
+                    'PASSWORD',
+                    style: TextStyle(fontSize: _billUiFontSize),
                   ),
                 ),
                 Expanded(
@@ -1651,7 +1671,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                       obscureText: true,
                       autofocus: true,
                       onSubmitted: (_) => _tryUnlockEdit(),
-                      style: const TextStyle(fontSize: AppTextSizes.fieldText),
+                      style: const TextStyle(fontSize: _billUiFontSize),
                       decoration: const InputDecoration(
                         isDense: true,
                         filled: true,
@@ -1659,7 +1679,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                         border: OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 12,
+                          vertical: 14,
                         ),
                       ),
                     ),
@@ -1678,7 +1698,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                     ),
                     child: const Text(
                       'OK',
-                      style: TextStyle(fontSize: AppTextSizes.buttonText),
+                      style: TextStyle(fontSize: _billUiFontSize),
                     ),
                   ),
                 ),
@@ -1691,7 +1711,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                   _passwordError!,
                   style: const TextStyle(
                     color: AppColors.danger,
-                    fontSize: AppTextSizes.listSubtitle,
+                    fontSize: _billUiFontSize,
                   ),
                 ),
               ),
@@ -1700,9 +1720,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             const Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text(
-                'Edit mode — tap a line to correct rate/qty.',
+                'EDIT MODE — TAP A LINE TO CORRECT RATE/QTY.',
                 style: TextStyle(
-                  fontSize: AppTextSizes.listSubtitle,
+                  fontSize: _billUiFontSize,
                   color: AppColors.success,
                 ),
               ),
@@ -1723,7 +1743,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         Text(
           label,
           style: const TextStyle(
-            fontSize: AppTextSizes.fieldLabel,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w600,
             color: Colors.black,
           ),
@@ -1769,7 +1789,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             : null,
 
         style: const TextStyle(
-          fontSize: AppTextSizes.fieldText,
+          fontSize: _billUiFontSize,
           color: Colors.black,
         ),
 
@@ -1780,7 +1800,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           border: OutlineInputBorder(),
           contentPadding: EdgeInsets.symmetric(
             horizontal: 8,
-            vertical: 12,
+            vertical: 14,
           ),
         ),
       );
@@ -1806,7 +1826,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       enabledBorder: OutlineInputBorder(),
       focusedBorder: OutlineInputBorder(),
       disabledBorder: OutlineInputBorder(),
-      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 14),
     );
   }
 
@@ -1841,7 +1861,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
       decoration: _entryDecoration(),
       style: const TextStyle(
-        fontSize: AppTextSizes.fieldText,
+        fontSize: _billUiFontSize,
         height: 1,
         color: Colors.black,
       ),
@@ -1867,7 +1887,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         Text(
           label,
           style: const TextStyle(
-            fontSize: AppTextSizes.fieldLabel,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w700,
             color: Colors.black,
           ),
@@ -1890,7 +1910,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         const Text(
           'GROUP',
           style: TextStyle(
-            fontSize: AppTextSizes.fieldLabel,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w700,
             color: Colors.black,
           ),
@@ -1913,19 +1933,19 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       isExpanded: true,
       alignment: AlignmentDirectional.bottomStart,
       decoration: _entryDecoration().copyWith(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       ),
       dropdownColor: Colors.white,
       style: const TextStyle(
-        fontSize: AppTextSizes.fieldText,
+        fontSize: _billUiFontSize,
         color: Colors.black,
         height: 1,
       ),
-      icon: const Icon(Icons.arrow_drop_down, color: Colors.black, size: 22),
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.black, size: 28),
       hint: const Text(
-        'Select',
+        'SELECT',
         style: TextStyle(
-          fontSize: AppTextSizes.fieldText,
+          fontSize: _billUiFontSize,
           color: Colors.black54,
           height: 1,
         ),
@@ -1935,10 +1955,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             (name) => DropdownMenuItem(
               value: name,
               child: Text(
-                name,
-                overflow: TextOverflow.ellipsis,
+                name.toUpperCase(),
+                overflow: TextOverflow.visible,
+                softWrap: true,
                 style: const TextStyle(
-                  fontSize: AppTextSizes.fieldText,
+                  fontSize: _billUiFontSize,
                   color: Colors.black,
                   height: 1,
                 ),
@@ -2058,7 +2079,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           _rateError!,
           style: const TextStyle(
             color: AppColors.danger,
-            fontSize: AppTextSizes.fieldText,
+            fontSize: _billUiFontSize,
           ),
         ),
       ],
@@ -2068,7 +2089,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           _qtyError!,
           style: const TextStyle(
             color: AppColors.danger,
-            fontSize: AppTextSizes.fieldText,
+            fontSize: _billUiFontSize,
           ),
         ),
       ],
@@ -2083,8 +2104,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // S.NO | RATE | QTY | AMOUNT | Total | CGST % | SGST % | IGST | X
   // ============================================================
 
-  double _tableWidth(bool showTax) =>
-      (showTax ? 820 : 620).toDouble() + _deleteColWidth;
+  double _tableWidth(bool showTax) {
+    var width = _colSno + _colGroup + (_colNumeric * 4) + _deleteColWidth;
+    if (showTax) {
+      width += _colTax * 3;
+    }
+    return width;
+  }
 
   Widget _buildItemTableSection({bool mobile = false}) {
     final showTax = _items.isNotEmpty;
@@ -2096,25 +2122,28 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       children: [
         _buildAlignedEntryRow(showTax: showTax, mobile: mobile),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: AppColors.cardWhite,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildItemTable(mobile: mobile),
-              if (_items.isNotEmpty) ...[
-                SizedBox(
-                  width: width,
-                  child: _buildGrandTotalFooter(),
-                ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildItemTable(mobile: mobile),
+                if (_items.isNotEmpty) ...[
+                  SizedBox(
+                    width: width,
+                    child: _buildGrandTotalFooter(),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -2148,34 +2177,34 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       ),
     );
 
-    if (!mobile) {
-      return table;
-    }
+    return table;
+  }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: table,
-    );
-  }  // ============================================================
+  // ============================================================
   // TABLE HEADER
   // ============================================================
 
   Widget _buildTableHeader(bool showTax) {
     return Container(
-      height: _tableRowHeight,
+      height: _tableHeaderHeight,
       color: AppColors.tableHeader,
       child: Row(
         children: [
-          _tableHeaderCell('S.NO', _flexSno),
-          _tableHeaderCell('GROUP', _flexGroup),
-          _tableHeaderCell('RATE', _flexRate, alignRight: true),
-          _tableHeaderCell('QTY', _flexQty, alignRight: true),
-          _tableHeaderCell('AMOUNT', _flexAmount, alignRight: true),
-          _tableHeaderCell('TOTAL', _flexLineTotal, alignRight: true, last: !showTax),
+          _tableHeaderCell('S.NO', _colSno),
+          _tableHeaderCell('GROUP', _colGroup),
+          _tableHeaderCell('RATE', _colNumeric, alignRight: true),
+          _tableHeaderCell('QTY', _colNumeric, alignRight: true),
+          _tableHeaderCell('AMOUNT', _colNumeric, alignRight: true),
+          _tableHeaderCell(
+            'TOTAL',
+            _colNumeric,
+            alignRight: true,
+            last: !showTax,
+          ),
           if (showTax) ...[
-            _tableHeaderCell('CGST %', _flexCgst, alignRight: true),
-            _tableHeaderCell('SGST %', _flexSgst, alignRight: true),
-            _tableHeaderCell('IGST', _flexIgst, alignRight: true),
+            _tableHeaderCell('CGST %', _colTax, alignRight: true),
+            _tableHeaderCell('SGST %', _colTax, alignRight: true),
+            _tableHeaderCell('IGST', _colTax, alignRight: true),
           ],
           _tableDeleteHeaderCell(),
         ],
@@ -2185,14 +2214,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _tableHeaderCell(
     String text,
-    int flex, {
+    double width, {
     bool last = false,
     bool alignRight = false,
   }) {
-    return Expanded(
-      flex: flex,
+    return SizedBox(
+      width: width,
       child: Container(
-        height: _tableRowHeight,
+        height: _tableHeaderHeight,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           border: Border(
@@ -2209,7 +2238,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           softWrap: true,
           overflow: TextOverflow.visible,
           style: const TextStyle(
-            fontSize: _tableHeaderFontSize,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.bold,
             height: 1.1,
             color: Color(0xFF111111),
@@ -2223,7 +2252,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     return SizedBox(
       width: _deleteColWidth,
       child: Container(
-        height: _tableRowHeight,
+        height: _tableHeaderHeight,
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: AppColors.border, width: 0.6),
@@ -2241,20 +2270,20 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            'Line ${index + 1}',
+            'LINE ${index + 1}',
             style: const TextStyle(
-              fontSize: AppTextSizes.fieldLabel,
+              fontSize: _billUiFontSize,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(width: 10),
           _buildEditLineField(
-            label: 'Rate',
+            label: 'RATE',
             controller: _editRateController,
           ),
           const SizedBox(width: 10),
           _buildEditLineField(
-            label: 'Qty',
+            label: 'QTY',
             controller: _editQtyController,
           ),
           const SizedBox(width: 10),
@@ -2270,7 +2299,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ),
               child: const Text(
                 'OK',
-                style: TextStyle(fontSize: AppTextSizes.buttonText),
+                style: TextStyle(fontSize: _billUiFontSize),
               ),
             ),
           ),
@@ -2290,7 +2319,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         Text(
           label,
           style: const TextStyle(
-            fontSize: AppTextSizes.fieldLabel,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w700,
             color: AppColors.navy,
           ),
@@ -2307,7 +2336,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: AppTextSizes.fieldText, height: 1),
+            style: const TextStyle(fontSize: _billUiFontSize, height: 1),
             decoration: _entryDecoration(),
           ),
         ),
@@ -2344,34 +2373,46 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         color: selected ? const Color(0xFFFFE5A0) : AppColors.background,
         child: Row(
           children: [
-            _tableDataCell('${index + 1}', _flexSno),
+            _tableDataCell('${index + 1}', _colSno),
             _tableDataCell(
               item.particular.trim().toUpperCase(),
-              _flexGroup,
+              _colGroup,
             ),
-            _tableDataCell(_formatAmount(item.rate), _flexRate, alignRight: true),
-            _tableDataCell(_formatQtyOrPct(item.qty), _flexQty, alignRight: true),
-            _tableDataCell(_formatAmount(item.amount), _flexAmount, alignRight: true),
+            _tableDataCell(
+              _formatAmount(item.rate),
+              _colNumeric,
+              alignRight: true,
+            ),
+            _tableDataCell(
+              _formatQtyOrPct(item.qty),
+              _colNumeric,
+              alignRight: true,
+            ),
+            _tableDataCell(
+              _formatAmount(item.amount),
+              _colNumeric,
+              alignRight: true,
+            ),
             _tableDataCell(
               _formatAmount(item.grossAmt),
-              _flexLineTotal,
+              _colNumeric,
               alignRight: true,
               last: !showTax,
             ),
             if (showTax) ...[
               _tableDataCell(
                 _formatQtyOrPct(item.cgstPct),
-                _flexCgst,
+                _colTax,
                 alignRight: true,
               ),
               _tableDataCell(
                 _formatQtyOrPct(item.sgstPct),
-                _flexSgst,
+                _colTax,
                 alignRight: true,
               ),
               _tableDataCell(
                 _formatAmount(item.igst),
-                _flexIgst,
+                _colTax,
                 alignRight: true,
               ),
             ],
@@ -2395,7 +2436,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         child: IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          icon: const Icon(Icons.close, color: AppColors.danger, size: 16),
+          icon: const Icon(Icons.close, color: AppColors.danger, size: 22),
           tooltip: 'Remove item',
           onPressed: () => _removeItem(index),
         ),
@@ -2409,12 +2450,12 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _tableDataCell(
     String text,
-    int flex, {
+    double width, {
     bool last = false,
     bool alignRight = false,
   }) {
-    return Expanded(
-      flex: flex,
+    return SizedBox(
+      width: width,
       child: Container(
         height: _tableRowHeight,
         padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -2430,10 +2471,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
             alignRight ? Alignment.centerRight : Alignment.centerLeft,
         child: Text(
           text,
-          maxLines: 1,
+          maxLines: null,
+          softWrap: true,
           overflow: TextOverflow.visible,
           style: const TextStyle(
-            fontSize: _tableCellFontSize,
+            fontSize: _billUiFontSize,
             fontWeight: FontWeight.w600,
             height: 1.1,
             color: Color(0xFF111111),
