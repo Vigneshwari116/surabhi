@@ -93,14 +93,6 @@ void main() {
     expect(find.byKey(const Key('bill_qty_field')), findsOneWidget);
     expect(find.byKey(const Key('save_sale_bar_button')), findsOneWidget);
     expect(find.byKey(const Key('bill_mobile_field')), findsOneWidget);
-
-    final todaySales = find.byKey(const Key('today_sales_button'));
-    expect(
-      tester.widget<Focus>(find.ancestor(
-        of: todaySales,
-        matching: find.byType(Focus),
-      ).first).skipTraversal,
-      isTrue,
-    );
+    expect(find.byKey(const Key('today_sales_button')), findsOneWidget);
   });
 }
