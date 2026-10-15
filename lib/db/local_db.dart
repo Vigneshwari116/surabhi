@@ -1032,6 +1032,10 @@ class LocalDb {
     );
   }
 
+  Future<void> refreshNextBillNoFromBills(String location) async {
+    await _refreshNextBillNoFromBills(location);
+  }
+
   Future<void> _refreshNextBillNoFromBills(String location) async {
     final db = await database;
     final result = await db.rawQuery(

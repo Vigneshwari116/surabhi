@@ -190,6 +190,9 @@ class _SummaryAbstractScreenState extends State<SummaryAbstractScreen> {
         final label = DateFormat('dd MMM yyyy').format(DateTime.parse(row.day));
         return ListTile(
           title: Text(label),
+          subtitle: row.totalPcs > 0
+              ? Text('PCS ${row.totalPcs.toStringAsFixed(0)}')
+              : null,
           trailing: Text(
             _formatMoney(row.totalAmount),
             style: const TextStyle(

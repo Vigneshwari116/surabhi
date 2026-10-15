@@ -24,6 +24,45 @@ class AbstractSummary {
 }
 
 class AbstractRepository {
+  static Future<double> getTotalPcsForDateRange({
+    required String location,
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    final code = locationCodeFromDisplayName(location);
+    return getTotalPcsForLocationCode(
+      locationCode: code,
+      fromDate: fromDate,
+      toDate: toDate,
+    );
+  }
+
+  static Future<double> getTotalPcsForLocationCode({
+    required String locationCode,
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    try {
+      await LocationSeedService.ensureLocationSeeded(locationCode);
+      await LocationBillDetailSeedService.ensureLocationSeeded(locationCode);
+      final fromKey = _formatDate(fromDate);
+      final toKey = _formatDate(toDate);
+      final rows = await _readBillsForLocationCode(locationCode);
+
+      var totalPcs = 0.0;
+      for (final row in rows) {
+        final billDate = row['bill_date'] as String;
+        if (billDate.compareTo(fromKey) < 0 || billDate.compareTo(toKey) > 0) {
+          continue;
+        }
+        totalPcs += (row['total_qty'] as num?)?.toDouble() ?? 0;
+      }
+      return totalPcs;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   static Future<AbstractSummary> getSummaryForDateRange({
     required String location,
     required DateTime fromDate,
@@ -109,6 +148,7 @@ class AbstractRepository {
                 'total_cgst': entry.totalCgst,
                 'total_sgst': entry.totalSgst,
                 'total_igst': entry.totalIgst,
+                'total_qty': entry.totalQty,
               },
             )
             .toList(growable: false);
@@ -159,6 +199,7 @@ class AbstractRepository {
           'total_cgst',
           'total_sgst',
           'total_igst',
+          'total_qty',
         ],
       );
     } finally {

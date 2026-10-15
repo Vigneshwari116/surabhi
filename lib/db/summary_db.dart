@@ -12,11 +12,13 @@ class DaySummaryRow {
   final String location;
   final String day;
   final double totalAmount;
+  final double totalPcs;
 
   const DaySummaryRow({
     required this.location,
     required this.day,
     required this.totalAmount,
+    this.totalPcs = 0,
   });
 }
 
@@ -25,12 +27,14 @@ class MonthSummaryRow {
   final int year;
   final int month;
   final double totalAmount;
+  final double totalPcs;
 
   const MonthSummaryRow({
     required this.location,
     required this.year,
     required this.month,
     required this.totalAmount,
+    this.totalPcs = 0,
   });
 }
 
@@ -54,7 +58,7 @@ class SummaryDb {
     _instance = null;
   }
 
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
   static const String dbFileName = 'sales_summary.db';
 
   Future<void> initialize() async {
@@ -83,6 +87,9 @@ class SummaryDb {
         if (oldVersion < 1) {
           await _createSchema(db);
         }
+        if (oldVersion < 2) {
+          await _ensurePcsColumns(db);
+        }
       },
     );
   }
@@ -100,6 +107,7 @@ class SummaryDb {
         location TEXT NOT NULL,
         day TEXT NOT NULL,
         total_amount REAL NOT NULL DEFAULT 0,
+        total_pcs REAL NOT NULL DEFAULT 0,
         PRIMARY KEY (location, day)
       )
     ''');
@@ -110,9 +118,25 @@ class SummaryDb {
         year INTEGER NOT NULL,
         month INTEGER NOT NULL,
         total_amount REAL NOT NULL DEFAULT 0,
+        total_pcs REAL NOT NULL DEFAULT 0,
         PRIMARY KEY (location, year, month)
       )
     ''');
+  }
+
+  Future<void> _ensurePcsColumns(Database db) async {
+    final dayCols = await db.rawQuery('PRAGMA table_info(day_summary)');
+    if (!dayCols.any((row) => row['name'] == 'total_pcs')) {
+      await db.execute(
+        'ALTER TABLE day_summary ADD COLUMN total_pcs REAL NOT NULL DEFAULT 0',
+      );
+    }
+    final monthCols = await db.rawQuery('PRAGMA table_info(month_summary)');
+    if (!monthCols.any((row) => row['name'] == 'total_pcs')) {
+      await db.execute(
+        'ALTER TABLE month_summary ADD COLUMN total_pcs REAL NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Future<bool> _isBootstrapped() async {
@@ -294,6 +318,157 @@ class SummaryDb {
     }
   }
 
+  /// Rebuilds day/month summary buckets from live bill rows (grand total + PCS).
+  Future<void> rebuildSummariesForDays({
+    required String location,
+    required Iterable<DateTime> days,
+  }) async {
+    final db = await database;
+    final uniqueDays = days
+        .map((d) => DateTime(d.year, d.month, d.day))
+        .toSet()
+        .toList(growable: false);
+
+    final aggregates = await _aggregateBillsByDay(location);
+    final monthsToRebuild = <(int, int)>{};
+
+    await db.transaction((txn) async {
+      for (final day in uniqueDays) {
+        final key = _dayKey(day);
+        final totals = aggregates[key] ?? (amount: 0.0, pcs: 0.0);
+        monthsToRebuild.add((day.year, day.month));
+
+        if (totals.amount.abs() < 0.0001 && totals.pcs.abs() < 0.0001) {
+          await txn.delete(
+            'day_summary',
+            where: 'location = ? AND day = ?',
+            whereArgs: [location, key],
+          );
+        } else {
+          await txn.insert(
+            'day_summary',
+            {
+              'location': location,
+              'day': key,
+              'total_amount': totals.amount,
+              'total_pcs': totals.pcs,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+
+      for (final ym in monthsToRebuild) {
+        await _rebuildMonthInTxn(txn, location: location, year: ym.$1, month: ym.$2);
+      }
+    });
+  }
+
+  Future<Map<String, ({double amount, double pcs})>> _aggregateBillsByDay(
+    String location,
+  ) async {
+    final code = locationCodeFromDisplayName(location);
+    final path = await LocationDatabase.dbPathForLocationCode(code);
+    if (!await File(path).exists()) {
+      return {};
+    }
+
+    final billDb = await openDatabase(
+      path,
+      readOnly: true,
+      singleInstance: false,
+    );
+
+    try {
+      final rows = await billDb.query(
+        'bills',
+        columns: ['bill_date', 'grand_total', 'total_qty'],
+        where: 'deleted = 0 AND location = ?',
+        whereArgs: [location],
+      );
+
+      final map = <String, ({double amount, double pcs})>{};
+      for (final row in rows) {
+        final day = row['bill_date'] as String;
+        final bucket = map.putIfAbsent(day, () => (amount: 0.0, pcs: 0.0));
+        map[day] = (
+          amount: bucket.amount + (row['grand_total'] as num).toDouble(),
+          pcs: bucket.pcs + (row['total_qty'] as num).toDouble(),
+        );
+      }
+      return map;
+    } finally {
+      await billDb.close();
+    }
+  }
+
+  Future<void> _rebuildMonthInTxn(
+    Transaction txn, {
+    required String location,
+    required int year,
+    required int month,
+  }) async {
+    final prefix =
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-';
+    final rows = await txn.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(total_amount), 0) AS total_amount,
+        COALESCE(SUM(total_pcs), 0) AS total_pcs
+      FROM day_summary
+      WHERE location = ? AND day LIKE ?
+      ''',
+      [location, '$prefix%'],
+    );
+
+    final amount = (rows.first['total_amount'] as num?)?.toDouble() ?? 0;
+    final pcs = (rows.first['total_pcs'] as num?)?.toDouble() ?? 0;
+
+    if (amount.abs() < 0.0001 && pcs.abs() < 0.0001) {
+      await txn.delete(
+        'month_summary',
+        where: 'location = ? AND year = ? AND month = ?',
+        whereArgs: [location, year, month],
+      );
+      return;
+    }
+
+    await txn.insert(
+      'month_summary',
+      {
+        'location': location,
+        'year': year,
+        'month': month,
+        'total_amount': amount,
+        'total_pcs': pcs,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<double> getTotalPcsForDay({
+    required String day,
+    String? location,
+  }) async {
+    final db = await database;
+    if (location != null) {
+      final rows = await db.query(
+        'day_summary',
+        columns: ['total_pcs'],
+        where: 'location = ? AND day = ?',
+        whereArgs: [location, day],
+        limit: 1,
+      );
+      return (rows.firstOrNull?['total_pcs'] as num?)?.toDouble() ?? 0;
+    }
+
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(SUM(total_pcs), 0) AS total FROM day_summary WHERE day = ?',
+      [day],
+    );
+    return (rows.first['total'] as num?)?.toDouble() ?? 0;
+  }
+
   Future<double> getTotalForDay({
     required String day,
     String? location,
@@ -354,6 +529,7 @@ class SummaryDb {
             location: location ?? 'ALL',
             day: row['day'] as String,
             totalAmount: (row['total_amount'] as num).toDouble(),
+            totalPcs: (row['total_pcs'] as num?)?.toDouble() ?? 0,
           ),
         )
         .toList(growable: false);
@@ -389,6 +565,7 @@ class SummaryDb {
             year: year,
             month: row['month'] as int,
             totalAmount: (row['total_amount'] as num).toDouble(),
+            totalPcs: (row['total_pcs'] as num?)?.toDouble() ?? 0,
           ),
         )
         .toList(growable: false);
