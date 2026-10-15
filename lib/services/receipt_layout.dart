@@ -15,14 +15,14 @@ class ReceiptLayout {
   static const int textMarginColumns =
       (paperColumns - textContentColumns) ~/ 2;
 
-  static const int columnCount = 32;
-  static const int snoWidth = 3;
-  static const int snoGroupGap = 1;
+  /// Item table: SNO 2 | GROUP 8 | RATE 5 | QTY 3 | AMOUNT 7 with 1-col gaps.
+  static const int columnCount = 29;
+  static const int columnGap = 1;
+  static const int snoWidth = 2;
   static const int groupWidth = 8;
-  static const int rateWidth = 6;
-  static const int qtyWidth = 4;
-  static const int amountWidth =
-      columnCount - snoWidth - snoGroupGap - groupWidth - rateWidth - qtyWidth;
+  static const int rateWidth = 5;
+  static const int qtyWidth = 3;
+  static const int amountWidth = 7;
 
   /// Courier Bold character width ≈ 0.6 × font size (pt).
   static const double courierBoldCharWidthFactor = 0.6;

@@ -5,7 +5,15 @@ import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
 const _cols = ReceiptService.thermalContentColumns;
-const _amountStart = 3 + 1 + 8 + 6 + 4;
+const _gap = ReceiptLayout.columnGap;
+const _amountStart = ReceiptLayout.snoWidth +
+    _gap +
+    ReceiptLayout.groupWidth +
+    _gap +
+    ReceiptLayout.rateWidth +
+    _gap +
+    ReceiptLayout.qtyWidth +
+    _gap;
 
 SaleBill _sampleBill() {
   return SaleBill(
@@ -34,11 +42,13 @@ void main() {
 
     expect(text, contains('SURABHI EXPORTS'));
     expect(text, contains('THARGUPET'));
+    expect(text, contains('T.10, 3RD FLOOR'));
     expect(text, contains('29ACDPJ2452J1ZK'));
     expect(text, contains('BILL NO:133'));
     expect(text, contains('13/10/2026'));
     expect(text, isNot(contains('DATE:')));
     _expectLinesWithinWidth(lines);
+    _expectAddressWordsNotSplit(lines);
 
     final title = lines.first;
     final gstinLine = lines.firstWhere((line) => line.contains('GSTIN:'));
@@ -46,24 +56,30 @@ void main() {
     _expectCentered(gstinLine);
   });
 
-  test('item table includes spaced SNO and GROUP columns', () {
+  test('item table has 29 columns with gaps between every column', () {
     final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
-      (line) => line.contains('SHIRT') && line.contains('50.00'),
+      (line) => line.contains('SHIRT') && line.contains('50'),
     );
 
     expect(header.length, _cols);
     expect(itemLine.length, _cols);
-    expect(header.substring(0, 3), 'SNO');
-    expect(header.substring(3, 4), ' ');
-    expect(header.substring(4, 12).trim(), 'GROUP');
-    expect(itemLine.substring(4, 12).trim(), 'SHIRT');
+    expect(header.substring(0, 2), 'SN');
+    expect(header[2], ' ');
+    expect(header.substring(3, 11).trim(), 'GROUP');
+    expect(header[11], ' ');
+    expect(header.substring(12, 17).trim(), 'RATE');
+    expect(header[17], ' ');
+    expect(header.substring(18, 21).trim(), 'QTY');
+    expect(header[21], ' ');
+    expect(header.substring(22).trim(), 'AMOUNT');
+    expect(itemLine.substring(3, 11).trim(), 'SHIRT');
 
     _expectLinesWithinWidth(lines);
   });
 
-  test('total line labels quantity as TOTAL PCS', () {
+  test('total line labels quantity as TOTAL PCS with whole numbers', () {
     final bill = SaleBill(
       billNo: 1,
       location: 'Surabhi',
@@ -84,19 +100,52 @@ void main() {
     final lines = ReceiptService.buildReceiptLines(bill);
     final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
     expect(totalLine, contains('132'));
-    expect(totalLine, contains('1257.14'));
+    expect(totalLine, contains('1257'));
+    expect(totalLine, isNot(contains('.')));
   });
 
-  test('receipt prints gst line once with two decimals on amounts', () {
+  test('receipt prints gst line once without decimals on money columns', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
     expect(text, contains('CGST% 2.5  SGST% 2.5'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, contains('EXCHANGE ONLY 3 DAYS'));
-    expect(text, contains('50.00'));
-    expect(text, contains('47.62'));
+    expect(text, contains('50'));
+    expect(text, contains('48'));
+    expect(text, isNot(contains('50.00')));
+    expect(text, isNot(contains('47.62')));
 
     final gstMatches = 'CGST% 2.5'.allMatches(text).length;
     expect(gstMatches, 1);
+  });
+
+  test('item section has one separator after header and one after last item', () {
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 1, 1),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'A', qty: 1, rate: 10),
+        BillItem(particular: 'B', qty: 1, rate: 20),
+      ],
+      totalQty: 2,
+      totalAmount: 30,
+      totalCgst: 1,
+      totalSgst: 1,
+      totalIgst: 0,
+      grandTotal: 32,
+    );
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final headerIndex = lines.indexWhere((l) => l.contains('GROUP'));
+    final gstIndex = lines.indexWhere((l) => l.contains('CGST%'));
+    final section = lines.sublist(headerIndex, gstIndex);
+    final dashLines =
+        section.where((line) => line == '-' * _cols).toList(growable: false);
+    expect(dashLines.length, 2);
+    expect(section.where((l) => l.trimLeft().startsWith('1 ')).length, 1);
+    expect(section.where((l) => l.trimLeft().startsWith('2 ')).length, 1);
   });
 
   test('separator lines are exactly content width', () {
@@ -132,10 +181,9 @@ void main() {
     expect(text, isNot(contains('longnameitem')));
   });
 
-  test('computed pdf font fits 58mm content width', () {
+  test('computed pdf font fits content width for 29 columns', () {
     final fontSize = ReceiptLayout.bodyFontSizePt();
-    expect(fontSize, lessThanOrEqualTo(8.3));
-    expect(fontSize, greaterThan(7.5));
+    expect(fontSize, closeTo(9.0, 0.6));
 
     final charWidthMm =
         fontSize * ReceiptLayout.courierBoldCharWidthFactor * (25.4 / 72);
@@ -163,8 +211,9 @@ void main() {
     );
 
     final lines = ReceiptService.buildReceiptLines(bill);
-    final item = lines.firstWhere((line) => line.contains('99999.00'));
-    expect(item.substring(_amountStart).trim(), '99999.00');
+    final item = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
+    expect(item.substring(12, 17).trim(), '99999');
+    expect(item.substring(_amountStart).length, ReceiptLayout.amountWidth);
     _expectLinesWithinWidth(lines);
   });
 
@@ -187,11 +236,11 @@ void main() {
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final item = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
-    expect(item.substring(4, 12), '        ');
+    expect(item.substring(3, 11), '        ');
     _expectLinesWithinWidth(lines);
   });
 
-  test('bill no and full date stay on one line', () {
+  test('bill no and full date stay on one line within column width', () {
     final bill = SaleBill(
       billNo: 18134,
       location: 'Surabhi',
@@ -214,7 +263,28 @@ void main() {
     expect(billDateLine, contains('10/06/2024'));
     expect(billDateLine, contains('BILL NO:18134'));
     expect(billDateLine.length, lessThanOrEqualTo(_cols));
-    expect(billDateLine.trim().length, lessThanOrEqualTo(30));
+    expect(billDateLine.trim().length, lessThanOrEqualTo(_cols));
+  });
+
+  test('grand total uses stored value rounded for print only', () {
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 1, 1),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(particular: 'X', qty: 1, rate: 10.4)],
+      totalQty: 1,
+      totalAmount: 9.9,
+      totalCgst: 0.25,
+      totalSgst: 0.25,
+      totalIgst: 0,
+      grandTotal: 10.4,
+    );
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final grandLine = lines.firstWhere((l) => l.contains('GRAND TOTAL'));
+    expect(grandLine.trimRight().endsWith('10'), isTrue);
   });
 }
 
@@ -225,6 +295,19 @@ void _expectLinesWithinWidth(List<String> lines) {
       lessThanOrEqualTo(_cols),
       reason: 'Line exceeds $_cols columns: "$line"',
     );
+  }
+}
+
+void _expectAddressWordsNotSplit(List<String> lines) {
+  final text = lines.join('\n');
+  expect(text, contains('T.10, 3RD FLOOR'));
+  expect(text, contains('OLD THARGUPET'));
+  for (final line in lines) {
+    final trimmed = line.trim();
+    if (trimmed.contains('3RD') && trimmed.contains('FLOOR')) {
+      expect(trimmed, isNot(contains('3RDF')));
+      expect(trimmed, isNot(startsWith('FLOOR')));
+    }
   }
 }
 

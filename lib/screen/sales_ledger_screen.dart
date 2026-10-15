@@ -45,7 +45,10 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 1040;
+  static const double _tableMinWidth = 1100;
+
+  /// Minimum width for GROUP (~14 monospace characters at table font size).
+  static const double _groupColumnMinWidth = 140;
 
   bool _loading = true;
   bool _pulling = false;
@@ -446,7 +449,12 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('BILLNO', flex: 6, bold: true),
           _cell('DATE', flex: 7, bold: true),
           _cell('NAME', flex: 9, bold: true),
-          _cell('GROUP', flex: 7, bold: true),
+          _cell(
+            'GROUP',
+            flex: 9,
+            bold: true,
+            minWidth: _groupColumnMinWidth,
+          ),
           _cell('MOBILE', flex: 7, bold: true),
           _cell('PCS', flex: 5, bold: true, alignRight: true, minWidth: 56),
           _cell('CASH', flex: 7, bold: true, alignRight: true),
@@ -469,14 +477,18 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _viewBill(entry),
-      child: Row(
-        children: [
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           _cell('${entry.billNo}', flex: 6),
           _cell(_formatDate(entry.date), flex: 7),
           _cell(entry.customerName, flex: 9),
           _cell(
             entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
-            flex: 7,
+            flex: 9,
+            minWidth: _groupColumnMinWidth,
+            wrap: true,
           ),
           _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
           _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
@@ -488,6 +500,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell(_formatMoney(_entryGst(entry)), flex: 6, alignRight: true),
           _cell(_formatMoney(entry.grandTotal), flex: 10, alignRight: true),
         ],
+        ),
       ),
     );
   }
@@ -502,7 +515,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('', flex: 6, bold: true),
           _cell('', flex: 7, bold: true),
           _cell('', flex: 9, bold: true),
-          _cell('', flex: 7, bold: true),
+          _cell('', flex: 9, bold: true),
           _cell('', flex: 7, bold: true),
           _cell(
             formatPcs(summary.totalPcs),
@@ -531,6 +544,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     bool bold = false,
     bool alignRight = false,
     double? minWidth,
+    bool wrap = false,
   }) {
     return Expanded(
       flex: flex,
@@ -547,9 +561,9 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           child: Text(
             text,
             textAlign: alignRight ? TextAlign.right : TextAlign.left,
-            maxLines: bold ? 2 : 1,
-            softWrap: bold,
-            overflow: TextOverflow.visible,
+            maxLines: wrap ? 2 : (bold ? 2 : 1),
+            softWrap: wrap || bold,
+            overflow: wrap ? TextOverflow.clip : TextOverflow.visible,
             style: TextStyle(
               fontSize: AppTextSizes.tableRowText,
               fontWeight: bold ? FontWeight.bold : FontWeight.w500,

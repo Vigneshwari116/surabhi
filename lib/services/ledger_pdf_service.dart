@@ -96,6 +96,9 @@ class LedgerPdfService {
           pw.Text('Period: $rangeLabel', style: cellStyle),
           pw.SizedBox(height: 12),
           pw.TableHelper.fromTextArray(
+            columnWidths: {
+              3: const pw.FixedColumnWidth(92),
+            },
             headers: const [
               'BILLNO',
               'DATE',
