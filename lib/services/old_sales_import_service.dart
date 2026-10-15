@@ -5,49 +5,69 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/data/old_sales_import_v2_rows.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
-import 'package:surabhi/services/legacy_pdf_master_groups_service.dart';
 import 'package:surabhi/screen/bill_item.dart';
 
-/// One-time import of legacy sales rows (surabhi_old_sales_import.pdf).
+/// One-time import of legacy sales rows (surabhi_old_sales_import2.pdf).
 class OldSalesImportReport {
   final int billsImported;
   final int billsSkipped;
   final int rowsImported;
+  final int rowsSkipped;
   final List<int> blankPaymentBillNos;
+  final List<int> skippedExistingBillNos;
   final String? backupPath;
 
   const OldSalesImportReport({
     required this.billsImported,
     required this.billsSkipped,
     required this.rowsImported,
+    required this.rowsSkipped,
     required this.blankPaymentBillNos,
+    required this.skippedExistingBillNos,
     this.backupPath,
   });
 
   bool get shouldShowUi =>
-      billsImported > 0 || billsSkipped > 0 || blankPaymentBillNos.isNotEmpty;
+      billsImported > 0 ||
+      billsSkipped > 0 ||
+      rowsSkipped > 0 ||
+      blankPaymentBillNos.isNotEmpty;
 
   String toDisplayText() {
     final blank = blankPaymentBillNos.isEmpty
         ? 'none'
-        : blankPaymentBillNos.join(', ');
+        : '${blankPaymentBillNos.length} bills (${_shortList(blankPaymentBillNos)})';
+    final skippedBills = skippedExistingBillNos.isEmpty
+        ? 'none'
+        : skippedExistingBillNos.join(', ');
     final backup = backupPath == null ? '' : '\nBackup: $backupPath';
-    return 'Old sales import\n'
+    return 'Old sales import (v2)\n'
         'Bills imported: $billsImported\n'
-        'Bills skipped: $billsSkipped\n'
+        'Bills skipped (bill no. already exists): $billsSkipped — $skippedBills\n'
         'Rows imported: $rowsImported\n'
+        'Rows skipped (broken row in file): $rowsSkipped\n'
         'Blank payment mode (default applied): $blank$backup';
+  }
+
+  static String _shortList(List<int> values) {
+    if (values.length <= 12) {
+      return values.join(', ');
+    }
+    return '${values.take(12).join(', ')}, ...';
   }
 
   Map<String, dynamic> toJson() => {
         'billsImported': billsImported,
         'billsSkipped': billsSkipped,
         'rowsImported': rowsImported,
+        'rowsSkipped': rowsSkipped,
         'blankPaymentBillNos': blankPaymentBillNos,
+        'skippedExistingBillNos': skippedExistingBillNos,
         'backupPath': backupPath,
       };
 
@@ -56,22 +76,40 @@ class OldSalesImportReport {
       billsImported: (json['billsImported'] as num?)?.toInt() ?? 0,
       billsSkipped: (json['billsSkipped'] as num?)?.toInt() ?? 0,
       rowsImported: (json['rowsImported'] as num?)?.toInt() ?? 0,
+      rowsSkipped: (json['rowsSkipped'] as num?)?.toInt() ?? 0,
       blankPaymentBillNos: (json['blankPaymentBillNos'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList(growable: false) ??
           const [],
+      skippedExistingBillNos:
+          (json['skippedExistingBillNos'] as List<dynamic>?)
+                  ?.map((e) => (e as num).toInt())
+                  .toList(growable: false) ??
+              const [],
       backupPath: json['backupPath'] as String?,
     );
   }
 }
 
 class OldSalesImportService {
-  static const _prefDoneKey = 'old_sales_import_v1_done';
+  static const _prefDoneKey = 'old_sales_import_v2_done';
 
-  /// App default when legacy file left payment blank (bills 4 and 7).
+  /// App default when legacy file left payment blank.
   static const String defaultPaymentModeWhenBlank = 'UPI';
 
-  static final DateTime importDay = DateTime(2026, 10, 13);
+  /// Table A verification day (11 Oct 2026).
+  static final DateTime importDay = DateTime(2026, 10, 11);
+
+  /// Broken row excluded from PDF (bill 7, S.NO 8).
+  static const int rowsSkippedInSourceFile = 1;
+
+  static final List<DateTime> summaryRebuildDays = [
+    DateTime(2026, 10, 11),
+    DateTime(2026, 10, 12),
+    DateTime(2026, 10, 13),
+    DateTime(2026, 10, 14),
+    DateTime(2026, 10, 15),
+  ];
 
   static Future<void> runOnceIfNeeded() async {
     final prefs = await SharedPreferences.getInstance();
@@ -95,12 +133,11 @@ class OldSalesImportService {
 
     final backupPath = await _backupSalesDatabases();
 
-    await LegacyPdfMasterGroupsService.ensureOnStaffLogin();
-
     var billsImported = 0;
     var billsSkipped = 0;
     var rowsImported = 0;
     final blankPaymentBills = <int>[];
+    final skippedExisting = <int>[];
 
     final grouped = _groupRowsByBill();
     for (final entry in grouped.entries) {
@@ -114,15 +151,15 @@ class OldSalesImportService {
       );
       if (existing != null) {
         billsSkipped++;
+        skippedExisting.add(billNo);
         continue;
       }
 
       final items = <BillItem>[];
       for (final row in rows) {
-        final groupName = await _resolveGroupName(row.group);
         items.add(
           BillItem(
-            particular: groupName,
+            particular: row.group,
             qty: row.qty,
             rate: row.rate,
             cgstPct: 2.5,
@@ -133,7 +170,7 @@ class OldSalesImportService {
         rowsImported++;
       }
 
-      final paymentFromFile = rows.first.paymentFromFile;
+      final paymentFromFile = rows.first.payment;
       final paymentMode = paymentFromFile ?? defaultPaymentModeWhenBlank;
       if (paymentFromFile == null) {
         blankPaymentBills.add(billNo);
@@ -158,6 +195,7 @@ class OldSalesImportService {
         billsImported++;
       } catch (_) {
         billsSkipped++;
+        skippedExisting.add(billNo);
         rowsImported -= items.length;
       }
     }
@@ -165,32 +203,55 @@ class OldSalesImportService {
     await SummaryDb.instance.initialize();
     await SummaryDb.instance.rebuildSummariesForDays(
       location: location,
-      days: [importDay],
+      days: summaryRebuildDays,
     );
 
     await LocalDb.instance.refreshNextBillNoFromBills(location);
+
+    blankPaymentBills.sort();
+    skippedExisting.sort();
 
     return OldSalesImportReport(
       billsImported: billsImported,
       billsSkipped: billsSkipped,
       rowsImported: rowsImported,
+      rowsSkipped: rowsSkippedInSourceFile,
       blankPaymentBillNos: blankPaymentBills,
+      skippedExistingBillNos: skippedExisting,
       backupPath: backupPath,
     );
   }
 
-  /// Verifies table B totals for 13 Oct 2026 after import.
-  static Future<bool> verifyTableBTotals(String location) async {
+  /// Verifies table A totals for [day] (taxable amount, GST, PCS).
+  static Future<bool> verifyDayTotals({
+    required String location,
+    required DateTime day,
+    required double expectedTaxable,
+    required double expectedGst,
+    required double expectedPcs,
+  }) async {
     final summary = await AbstractRepository.getSummaryForDateRange(
       location: location,
-      fromDate: importDay,
-      toDate: importDay,
+      fromDate: day,
+      toDate: day,
     );
     final grand = summary.totalSaleAmount + summary.totalGst;
-    return summary.totalSaleAmount == 12950 &&
-        summary.totalGst == 650 &&
-        grand == 13600 &&
-        summary.totalPcs == 18;
+    final expectedGrand = expectedTaxable + expectedGst;
+    return summary.totalSaleAmount == expectedTaxable &&
+        summary.totalGst == expectedGst &&
+        grand == expectedGrand &&
+        summary.totalPcs == expectedPcs;
+  }
+
+  /// Table A row for 11 Oct 2026 (full file, all bills on that date).
+  static Future<bool> verifyTableBTotals(String location) {
+    return verifyDayTotals(
+      location: location,
+      day: importDay,
+      expectedTaxable: 47557,
+      expectedGst: 2393,
+      expectedPcs: 281,
+    );
   }
 
   static SaleBill _billFromItems({
@@ -233,26 +294,11 @@ class OldSalesImportService {
     );
   }
 
-  static Future<String> _resolveGroupName(String raw) async {
-    final names = await LocalDb.instance.listMasterItemNames();
-    final upper = raw.trim().toUpperCase();
-    for (final name in names) {
-      if (name.toUpperCase() == upper) {
-        return name;
-      }
-    }
-    final canonical = raw.trim();
-    try {
-      await LocalDb.instance.insertMasterItem(canonical);
-    } catch (_) {}
-    return canonical;
-  }
-
   static Future<String> _backupSalesDatabases() async {
     final supportDir = await getApplicationSupportDirectory();
     final stamp = DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
     final backupDir = Directory(
-      p.join(supportDir.path, 'backups', 'pre_old_sales_import_$stamp'),
+      p.join(supportDir.path, 'backups', 'pre_old_sales_import_v2_$stamp'),
     );
     await backupDir.create(recursive: true);
 
@@ -267,50 +313,11 @@ class OldSalesImportService {
     return backupDir.path;
   }
 
-  static Map<int, List<_ImportRow>> _groupRowsByBill() {
-    final map = <int, List<_ImportRow>>{};
-    for (final row in _cleanedRows) {
+  static Map<int, List<OldSalesImportV2Row>> _groupRowsByBill() {
+    final map = <int, List<OldSalesImportV2Row>>{};
+    for (final row in kOldSalesImportV2Rows) {
       map.putIfAbsent(row.billNo, () => []).add(row);
     }
     return map;
   }
-
-  /// Cleaned rows from surabhi_old_sales_import.pdf (page 2).
-  static final List<_ImportRow> _cleanedRows = [
-    _ImportRow(1, DateTime(2026, 10, 13, 19, 20, 55), 1, 'SHIRT', 12, 1, 'CASH'),
-    _ImportRow(1, DateTime(2026, 10, 13, 19, 20, 55), 2, 'SHIRT', 3, 1, 'CASH'),
-    _ImportRow(2, DateTime(2026, 10, 13, 19, 25, 17), 1, 'SHIRT', 120, 1, 'CASH'),
-    _ImportRow(2, DateTime(2026, 10, 13, 19, 25, 17), 2, 'SHIRT', 55, 1, 'CASH'),
-    _ImportRow(3, DateTime(2026, 10, 13, 19, 27, 34), 1, 'SHIRT', 2322, 1, 'CASH'),
-    _ImportRow(3, DateTime(2026, 10, 13, 19, 27, 34), 2, 'SHIRT', 5, 1, 'CASH'),
-    _ImportRow(4, DateTime(2026, 10, 13, 19, 28, 15), 1, 'SHIRT', 121, 1, null),
-    _ImportRow(4, DateTime(2026, 10, 13, 19, 28, 15), 2, 'SHIRT', 333, 1, null),
-    _ImportRow(4, DateTime(2026, 10, 13, 19, 28, 15), 3, 'SHIRT', 77, 1, null),
-    _ImportRow(5, DateTime(2026, 10, 13, 20, 0, 42), 1, 'SHIRT', 444, 1, 'CASH'),
-    _ImportRow(6, DateTime(2026, 10, 13, 20, 36, 11), 1, 'SHIRT', 5000, 1, 'CASH'),
-    _ImportRow(6, DateTime(2026, 10, 13, 20, 36, 11), 2, 'SHIRT', 230, 1, 'CASH'),
-    _ImportRow(7, DateTime(2026, 10, 13, 20, 40, 55), 1, 'T/JEANS', 23, 1, null),
-    _ImportRow(7, DateTime(2026, 10, 13, 20, 40, 55), 2, 'T/JEANS', 55, 1, null),
-    _ImportRow(7, DateTime(2026, 10, 13, 20, 40, 55), 3, 'T/JEANS', 1200, 4, null),
-  ];
-}
-
-class _ImportRow {
-  final int billNo;
-  final DateTime dateTime;
-  final int sno;
-  final String group;
-  final double rate;
-  final double qty;
-  final String? paymentFromFile;
-
-  const _ImportRow(
-    this.billNo,
-    this.dateTime,
-    this.sno,
-    this.group,
-    this.rate,
-    this.qty,
-    this.paymentFromFile,
-  );
 }

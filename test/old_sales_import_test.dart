@@ -10,7 +10,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/summary_db.dart';
+import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
+import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/old_sales_import_service.dart';
 
 class _FakePathProvider extends Fake
@@ -22,6 +24,25 @@ class _FakePathProvider extends Fake
 
   @override
   Future<String?> getApplicationSupportPath() async => root;
+}
+
+SaleBill _seedBill({required int billNo, required String location}) {
+  final item = BillItem(particular: 'SHIRT', qty: 1, rate: 100);
+  return SaleBill(
+    billNo: billNo,
+    location: location,
+    billDate: DateTime(2026, 10, 13),
+    paymentMode: 'CASH',
+    customerName: '',
+    mobile: '',
+    items: [item],
+    totalQty: item.qty,
+    totalAmount: item.amount,
+    totalCgst: item.cgst,
+    totalSgst: item.sgst,
+    totalIgst: item.igst,
+    grandTotal: item.grossAmt,
+  );
 }
 
 void main() {
@@ -47,6 +68,11 @@ void main() {
     await AppConfig.setLocation('main');
     await LocalDb.resetForTesting();
     await SummaryDb.resetForTesting();
+    final dir = await getApplicationSupportDirectory();
+    final dbFile = File('${dir.path}/main_sales.db');
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
     await LocalDb.instance.initialize();
   });
 
@@ -56,13 +82,14 @@ void main() {
     await AppConfig.clearLocation();
   });
 
-  test('import loads table B totals for 13 Oct 2026', () async {
+  test('full import matches table A for 11 Oct 2026 and next bill is 239', () async {
     final report = await OldSalesImportService.runImport();
 
-    expect(report.billsImported, 7);
+    expect(report.billsImported, 238);
     expect(report.billsSkipped, 0);
-    expect(report.rowsImported, 15);
-    expect(report.blankPaymentBillNos, [4, 7]);
+    expect(report.rowsImported, 482);
+    expect(report.rowsSkipped, 1);
+    expect(report.blankPaymentBillNos.length, 173);
 
     final location = AppConfig.displayLocationName;
     final day = OldSalesImportService.importDay;
@@ -72,23 +99,53 @@ void main() {
       fromDate: day,
       toDate: day,
     );
-    expect(summary.totalSaleAmount, 12950);
-    expect(summary.totalGst, 650);
-    expect(summary.totalSaleAmount + summary.totalGst, 13600);
-    expect(summary.totalPcs, 18);
+    expect(summary.totalSaleAmount, 47557);
+    expect(summary.totalGst, 2393);
+    expect(summary.totalSaleAmount + summary.totalGst, 49950);
+    expect(summary.totalPcs, 281);
 
     expect(await OldSalesImportService.verifyTableBTotals(location), isTrue);
 
     await SummaryDb.instance.initialize();
     final summaryPcs = await SummaryDb.instance.getTotalPcsForDay(
-      day: '2026-10-13',
+      day: '2026-10-11',
       location: location,
     );
-    expect(summaryPcs, 18);
+    expect(summaryPcs, 281);
+
+    final next = await LocalDb.instance.peekNextBillNoFromBills(location);
+    expect(next, 239);
 
     final second = await OldSalesImportService.runImport();
     expect(second.billsImported, 0);
-    expect(second.billsSkipped, 7);
+    expect(second.billsSkipped, 238);
     expect(second.rowsImported, 0);
+  });
+
+  test('skips existing bill numbers without overwriting', () async {
+    final location = AppConfig.displayLocationName;
+    for (var n = 1; n <= 7; n++) {
+      await LocalDb.instance.insertBill(
+        _seedBill(billNo: n, location: location),
+        syncStatus: 'synced',
+      );
+    }
+
+    final report = await OldSalesImportService.runImport();
+    expect(report.billsImported, 231);
+    expect(report.billsSkipped, 7);
+    expect(report.skippedExistingBillNos, [1, 2, 3, 4, 5, 6, 7]);
+    expect(report.rowsImported, 462);
+
+    final day = OldSalesImportService.importDay;
+    final summary = await AbstractRepository.getSummaryForDateRange(
+      location: location,
+      fromDate: day,
+      toDate: day,
+    );
+    // Bills 1–7 on 11 Oct are not in DB (skipped); only 8–54 from the file.
+    expect(summary.totalPcs, 236);
+    expect(summary.totalSaleAmount, 38797);
+    expect(summary.totalGst, 1953);
   });
 }
