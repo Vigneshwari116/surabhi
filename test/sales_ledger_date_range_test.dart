@@ -23,6 +23,7 @@ LocalLedgerEntry _entry({
     sgst: 2.5,
     igst: 0,
     grandTotal: 105,
+    pcs: 3,
     syncStatus: 'synced',
     groupSummary: groupSummary,
   );
@@ -48,6 +49,7 @@ void main() {
               sgst: 5,
               igst: 0,
               grandTotal: 210,
+              totalPcs: 6,
             ),
           ),
         ),
@@ -63,6 +65,8 @@ void main() {
     expect(find.text('Customer 1'), findsOneWidget);
     expect(find.text('Customer 2'), findsOneWidget);
     expect(find.text('SHIRT'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
+    expect(find.text('6'), findsOneWidget);
     expect(find.text('Grand total only'), findsNothing);
   });
 }

@@ -100,6 +100,7 @@ void main() {
     );
 
     expect(summary.totalSaleAmount, 100);
+    expect(summary.totalPcs, 1);
   });
 
   test('display location Surabhi resolves to main for today summary', () async {
@@ -131,5 +132,6 @@ void main() {
 
     expect(summary.totalSaleAmount, 200);
     expect(summary.totalGst, 10);
+    expect(summary.totalPcs, 1);
   });
 }

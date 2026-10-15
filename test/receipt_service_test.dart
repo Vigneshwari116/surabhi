@@ -63,6 +63,30 @@ void main() {
     _expectLinesWithinWidth(lines);
   });
 
+  test('total line labels quantity as TOTAL PCS', () {
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 13),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'Shirt', qty: 132, rate: 10),
+      ],
+      totalQty: 132,
+      totalAmount: 1257.14,
+      totalCgst: 31.43,
+      totalSgst: 31.43,
+      totalIgst: 0,
+      grandTotal: 1320,
+    );
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
+    expect(totalLine, contains('132'));
+    expect(totalLine, contains('1257.14'));
+  });
+
   test('receipt prints gst line once with two decimals on amounts', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
     expect(text, contains('CGST% 2.5  SGST% 2.5'));

@@ -159,6 +159,7 @@ class CompactAbstractSummary extends StatelessWidget {
   final String amountValue;
   final String gstValue;
   final String grandTotalValue;
+  final String? pcsValue;
   final String grandTotalLabel;
   final double cardWidth;
 
@@ -167,6 +168,7 @@ class CompactAbstractSummary extends StatelessWidget {
     required this.amountValue,
     required this.gstValue,
     required this.grandTotalValue,
+    this.pcsValue,
     this.grandTotalLabel = 'Grand total',
     this.cardWidth = 148,
   });
@@ -178,10 +180,11 @@ class CompactAbstractSummary extends StatelessWidget {
         final parentWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
+        final cardCount = pcsValue == null ? 3 : 4;
         final stackVertically = parentWidth < 520;
         final effectiveCardWidth = stackVertically
             ? parentWidth
-            : math.min(cardWidth, (parentWidth - 20) / 3);
+            : math.min(cardWidth, (parentWidth - 30) / cardCount);
 
         return Align(
           alignment: Alignment.topLeft,
@@ -192,6 +195,8 @@ class CompactAbstractSummary extends StatelessWidget {
             children: [
               _statCard('Amount', amountValue, effectiveCardWidth),
               _statCard('GST', gstValue, effectiveCardWidth),
+              if (pcsValue != null)
+                _statCard('PCS', pcsValue!, effectiveCardWidth),
               _statCard(grandTotalLabel, grandTotalValue, effectiveCardWidth),
             ],
           ),

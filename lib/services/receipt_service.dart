@@ -224,7 +224,7 @@ class ReceiptService {
   }
 
   static String _totalLine(double qty, double taxableTotal) {
-    final left = _padRight('TOTAL', _snoW + _gapW + _groupW + _rateW);
+    final left = _padRight('TOTAL PCS', _snoW + _gapW + _groupW + _rateW);
     final qtyPart = _padRight(_qty(qty), _qtyW);
     final amountPart = _padLeft(_amount(taxableTotal), _amountW);
     return '$left$qtyPart$amountPart';
@@ -307,7 +307,7 @@ class ReceiptService {
     if (value == value.roundToDouble()) {
       return value.toInt().toString();
     }
-    return value.toString();
+    return value.toStringAsFixed(2);
   }
 
   static String _rate(double value) {

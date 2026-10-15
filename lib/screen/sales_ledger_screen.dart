@@ -7,6 +7,7 @@ import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 class SalesLedgerScreen extends StatefulWidget {
@@ -44,7 +45,7 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 960;
+  static const double _tableMinWidth = 1040;
 
   bool _loading = true;
   bool _pulling = false;
@@ -447,6 +448,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('NAME', flex: 9, bold: true),
           _cell('GROUP', flex: 7, bold: true),
           _cell('MOBILE', flex: 7, bold: true),
+          _cell('PCS', flex: 5, bold: true, alignRight: true, minWidth: 56),
           _cell('CASH', flex: 7, bold: true, alignRight: true),
           _cell('CARD/UPI', flex: 7, bold: true, alignRight: true),
           _cell('TOTAL', flex: 7, bold: true, alignRight: true),
@@ -477,6 +479,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
             flex: 7,
           ),
           _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
+          _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: true),
               flex: 7, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: false),
@@ -501,6 +504,12 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell('', flex: 9, bold: true),
           _cell('', flex: 7, bold: true),
           _cell('', flex: 7, bold: true),
+          _cell(
+            formatPcs(summary.totalPcs),
+            flex: 5,
+            bold: true,
+            alignRight: true,
+          ),
           _cell(_formatMoney(payTotals.cash),
               flex: 7, bold: true, alignRight: true),
           _cell(_formatMoney(payTotals.card),
