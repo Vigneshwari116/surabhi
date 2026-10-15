@@ -13,11 +13,11 @@ class ReceiptService {
 
   static const int _contentWidth = thermalContentColumns;
 
-  /// Bill no + date line uses 30 cols (2 spare vs printable width).
-  static const int _billDateLineMaxChars = 30;
+  /// Bill no + date line fits the printable column width.
+  static const int _billDateLineMaxChars = ReceiptLayout.columnCount;
 
   static const int _snoW = ReceiptLayout.snoWidth;
-  static const int _gapW = ReceiptLayout.snoGroupGap;
+  static const String _gap = ' ';
   static const int _groupW = ReceiptLayout.groupWidth;
   static const int _rateW = ReceiptLayout.rateWidth;
   static const int _qtyW = ReceiptLayout.qtyWidth;
@@ -88,14 +88,14 @@ class ReceiptService {
     for (var index = 0; index < bill.items.length; index++) {
       final item = bill.items[index];
       lines.add(_line(_itemLine(item, index + 1)));
+    }
+
+    if (bill.items.isNotEmpty) {
       lines.add(separator);
     }
 
     for (final gstLine in _distinctGstLines(bill.items)) {
       lines.add(_line(gstLine));
-    }
-    if (bill.items.isNotEmpty) {
-      lines.add(separator);
     }
 
     lines.add(_line(_totalLine(bill.totalQty, bill.totalAmount)));
@@ -132,7 +132,7 @@ class ReceiptService {
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
       addressLine:
-          'T.10,3RD FLOOR,LN COMPLEX,OLD THARGUPET,Bangalore',
+          'T.10, 3RD FLOOR, LN COMPLEX, OLD THARGUPET, Bangalore',
     );
   }
 
@@ -183,21 +183,27 @@ class ReceiptService {
 
   static String _itemHeader() {
     return '${_padRight('SNO', _snoW)}'
-        '${' ' * _gapW}'
+        '$_gap'
         '${_padRight('GROUP', _groupW)}'
-        '${_padRight('RATE', _rateW)}'
-        '${_padRight('QTY', _qtyW)}'
+        '$_gap'
+        '${_padLeft('RATE', _rateW)}'
+        '$_gap'
+        '${_padLeft('QTY', _qtyW)}'
+        '$_gap'
         '${_padLeft('AMOUNT', _amountW)}';
   }
 
   static String _itemLine(BillItem item, int serialNo) {
     final group = _groupLabel(item.particular);
     return '${_padRight('$serialNo', _snoW)}'
-        '${' ' * _gapW}'
+        '$_gap'
         '${_padRight(group, _groupW)}'
-        '${_padRight(_rate(item.rate), _rateW)}'
-        '${_padRight(_qty(item.qty), _qtyW)}'
-        '${_padLeft(_amount(item.amount), _amountW)}';
+        '$_gap'
+        '${_padLeft(_wholeNumber(item.rate), _rateW)}'
+        '$_gap'
+        '${_padLeft(_wholeNumber(item.qty), _qtyW)}'
+        '$_gap'
+        '${_padLeft(_wholeNumber(item.amount), _amountW)}';
   }
 
   static String _groupLabel(String particular) {
@@ -224,15 +230,19 @@ class ReceiptService {
   }
 
   static String _totalLine(double qty, double taxableTotal) {
-    final left = _padRight('TOTAL PCS', _snoW + _gapW + _groupW + _rateW);
-    final qtyPart = _padRight(_qty(qty), _qtyW);
-    final amountPart = _padLeft(_amount(taxableTotal), _amountW);
-    return '$left$qtyPart$amountPart';
+    final leftWidth =
+        _snoW + ReceiptLayout.columnGap + _groupW + ReceiptLayout.columnGap + _rateW;
+    final left = _padRight('TOTAL PCS', leftWidth);
+    return '$left'
+        '$_gap'
+        '${_padLeft(_wholeNumber(qty), _qtyW)}'
+        '$_gap'
+        '${_padLeft(_wholeNumber(taxableTotal), _amountW)}';
   }
 
   static String _rightAmountLine(String label, double amount) {
     final labelPart = _padRight(label, _labelW);
-    return '$labelPart${_padLeft(_amount(amount), _amountW)}';
+    return '$labelPart${_padLeft(_wholeNumber(amount), _amountW)}';
   }
 
   static String _fieldLine(String label, String value) {
@@ -299,19 +309,16 @@ class ReceiptService {
     return text.padLeft(width);
   }
 
-  static String _amount(double value) {
-    return value.toStringAsFixed(2);
+  /// Display-only whole numbers on the printed receipt (round half up).
+  static String _wholeNumber(double value) {
+    return '${_roundHalfUp(value)}';
   }
 
-  static String _qty(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toInt().toString();
+  static int _roundHalfUp(double value) {
+    if (value >= 0) {
+      return (value + 0.5).floor();
     }
-    return value.toStringAsFixed(2);
-  }
-
-  static String _rate(double value) {
-    return value.toStringAsFixed(2);
+    return (value - 0.5).ceil();
   }
 
   static String _formatPct(double value) {
