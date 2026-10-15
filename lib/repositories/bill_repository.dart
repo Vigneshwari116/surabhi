@@ -58,6 +58,7 @@ class BillRepository {
 
     SaleBill? previous;
     try {
+      var billToSave = bill;
       if (updateLocalId != null) {
         previous = await LocalDb.instance.getBillByLocalId(updateLocalId);
       } else {
@@ -67,18 +68,43 @@ class BillRepository {
         );
         if (existingId != null) {
           previous = await LocalDb.instance.getBillByLocalId(existingId);
+          final freeNo = await LocalDb.instance.findNextFreeBillNo(
+            bill.location,
+            startingAt: bill.billNo,
+          );
+          if (freeNo != bill.billNo) {
+            billToSave = SaleBill(
+              billNo: freeNo,
+              location: bill.location,
+              billDate: bill.billDate,
+              paymentMode: bill.paymentMode,
+              customerName: bill.customerName,
+              mobile: bill.mobile,
+              items: bill.items,
+              totalQty: bill.totalQty,
+              totalAmount: bill.totalAmount,
+              totalCgst: bill.totalCgst,
+              totalSgst: bill.totalSgst,
+              totalIgst: bill.totalIgst,
+              grandTotal: bill.grandTotal,
+              deleted: bill.deleted,
+            );
+          }
         }
       }
 
       await LocalDb.instance.persistBill(
-        bill,
+        billToSave,
         updateLocalId: updateLocalId,
         syncStatus: syncStatus,
       );
 
-      await SummaryUpdateService.onBillSaved(previous: previous, current: bill);
-      DailyTotalService.pushBillDelta(current: bill, previous: previous);
-      return SalesApiResult.success(bill.billNo);
+      await SummaryUpdateService.onBillSaved(
+        previous: previous,
+        current: billToSave,
+      );
+      DailyTotalService.pushBillDelta(current: billToSave, previous: previous);
+      return SalesApiResult.success(billToSave.billNo);
     } catch (_) {
       if (apiResult.ok) {
         return apiResult;
