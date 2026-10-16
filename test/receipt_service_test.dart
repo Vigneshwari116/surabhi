@@ -131,7 +131,7 @@ void main() {
 
   test('receipt prints gst line once without decimals on money columns', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
-    expect(text, contains('CGST% 2.5  SGST% 2.5'));
+    expect(text, contains('CGST 2.5%  SGST 2.5%'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
     expect(text, contains('50'));
@@ -139,7 +139,7 @@ void main() {
     expect(text, isNot(contains('50.00')));
     expect(text, isNot(contains('47.62')));
 
-    final gstMatches = 'CGST% 2.5'.allMatches(text).length;
+    final gstMatches = 'CGST 2.5%'.allMatches(text).length;
     expect(gstMatches, 1);
   });
 
@@ -164,7 +164,7 @@ void main() {
     );
     final lines = ReceiptService.buildReceiptLines(bill);
     final headerIndex = lines.indexWhere((l) => l.contains('GROUP'));
-    final gstIndex = lines.indexWhere((l) => l.contains('CGST%'));
+    final gstIndex = lines.indexWhere((l) => l.contains('CGST 2.5%'));
     final section = lines.sublist(headerIndex, gstIndex);
     final dashLines =
         section.where((line) => line == '-' * _cols).toList(growable: false);
