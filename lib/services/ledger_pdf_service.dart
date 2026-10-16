@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
+import 'package:surabhi/utils/ledger_group_display.dart';
 import 'package:surabhi/utils/qty_format.dart';
 
 class LedgerPdfService {
@@ -95,66 +96,129 @@ class LedgerPdfService {
           pw.SizedBox(height: 4),
           pw.Text('Period: $rangeLabel', style: cellStyle),
           pw.SizedBox(height: 12),
-          pw.TableHelper.fromTextArray(
-            columnWidths: {
-              3: const pw.FixedColumnWidth(92),
-            },
-            headers: const [
-              'BILLNO',
-              'DATE',
-              'NAME',
-              'GROUP',
-              'MOBILE',
-              'PCS',
-              'CASH',
-              'CARD/UPI',
-              'TOTAL',
-              'GST',
-              'GRAND\nTOTAL',
-            ],
-            data: [
-              for (final entry in entries)
-                [
-                  '${entry.billNo}',
-                  _formatDate(entry.date),
-                  entry.customerName,
-                  entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
-                  entry.mobile.isEmpty ? '—' : entry.mobile,
-                  formatPcs(entry.pcs),
-                  _cashColumnAmount(entry),
-                  _cardColumnAmount(entry),
-                  money.format(entry.total),
-                  money.format(entry.cgst + entry.sgst + entry.igst),
-                  money.format(entry.grandTotal),
-                ],
-              [
-                '',
-                '',
-                '',
-                '',
-                '',
-                formatPcs(summary.totalPcs),
-                money.format(_cashTotal(entries)),
-                money.format(_cardTotal(entries)),
-                money.format(summary.total),
-                money.format(summary.cgst + summary.sgst + summary.igst),
-                money.format(summary.grandTotal),
-              ],
-            ],
+          _ledgerTable(
+            entries: entries,
+            summary: summary,
+            money: money,
             headerStyle: pw.TextStyle(
               font: pw.Font.helveticaBold(),
               fontSize: 8,
             ),
             cellStyle: cellStyle,
-            cellAlignment: pw.Alignment.centerLeft,
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            cellHeight: 20,
           ),
         ],
       ),
     );
 
     return doc.save();
+  }
+
+  static const double _groupColumnWidthPt = 118;
+
+  static pw.Widget _ledgerTable({
+    required List<LocalLedgerEntry> entries,
+    required LedgerSummary summary,
+    required NumberFormat money,
+    required pw.TextStyle headerStyle,
+    required pw.TextStyle cellStyle,
+  }) {
+    const headers = [
+      'BILLNO',
+      'DATE',
+      'NAME',
+      'GROUP',
+      'MOBILE',
+      'PCS',
+      'CASH',
+      'CARD/UPI',
+      'TOTAL',
+      'GST',
+      'GRAND\nTOTAL',
+    ];
+
+    pw.Widget headerCell(String label) {
+      return pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+        alignment: pw.Alignment.centerLeft,
+        color: PdfColors.grey300,
+        child: pw.Text(label, style: headerStyle),
+      );
+    }
+
+    pw.Widget bodyCell(
+      String text, {
+      pw.Alignment alignment = pw.Alignment.centerLeft,
+    }) {
+      return pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+        alignment: alignment,
+        child: pw.Text(text, style: cellStyle),
+      );
+    }
+
+    pw.Widget groupCell(String groupSummary) {
+      final display = LedgerGroupDisplay.formatForDisplay(groupSummary);
+      return pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+        alignment: pw.Alignment.centerLeft,
+        child: pw.Text(display, style: cellStyle),
+      );
+    }
+
+    final rows = <pw.TableRow>[
+      pw.TableRow(
+        children: headers.map(headerCell).toList(growable: false),
+      ),
+      for (final entry in entries)
+        pw.TableRow(
+          children: [
+            bodyCell('${entry.billNo}'),
+            bodyCell(_formatDate(entry.date)),
+            bodyCell(entry.customerName),
+            groupCell(entry.groupSummary),
+            bodyCell(entry.mobile.isEmpty ? '—' : entry.mobile),
+            bodyCell(formatPcs(entry.pcs), alignment: pw.Alignment.centerRight),
+            bodyCell(_cashColumnAmount(entry), alignment: pw.Alignment.centerRight),
+            bodyCell(_cardColumnAmount(entry), alignment: pw.Alignment.centerRight),
+            bodyCell(money.format(entry.total), alignment: pw.Alignment.centerRight),
+            bodyCell(
+              money.format(entry.cgst + entry.sgst + entry.igst),
+              alignment: pw.Alignment.centerRight,
+            ),
+            bodyCell(
+              money.format(entry.grandTotal),
+              alignment: pw.Alignment.centerRight,
+            ),
+          ],
+        ),
+      pw.TableRow(
+        children: [
+          bodyCell(''),
+          bodyCell(''),
+          bodyCell(''),
+          bodyCell(''),
+          bodyCell(''),
+          bodyCell(formatPcs(summary.totalPcs), alignment: pw.Alignment.centerRight),
+          bodyCell(money.format(_cashTotal(entries)), alignment: pw.Alignment.centerRight),
+          bodyCell(money.format(_cardTotal(entries)), alignment: pw.Alignment.centerRight),
+          bodyCell(money.format(summary.total), alignment: pw.Alignment.centerRight),
+          bodyCell(
+            money.format(summary.cgst + summary.sgst + summary.igst),
+            alignment: pw.Alignment.centerRight,
+          ),
+          bodyCell(money.format(summary.grandTotal), alignment: pw.Alignment.centerRight),
+        ],
+      ),
+    ];
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+      columnWidths: {
+        3: const pw.FixedColumnWidth(_groupColumnWidthPt),
+      },
+      defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+      children: rows,
+    );
   }
 
   static String _formatDate(String value) {

@@ -7,6 +7,7 @@ import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/ledger_group_display.dart';
 import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
@@ -45,10 +46,10 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 1100;
+  static const double _tableMinWidth = 1160;
 
-  /// Minimum width for GROUP (~14 monospace characters at table font size).
-  static const double _groupColumnMinWidth = 140;
+  /// Minimum width for GROUP (~20 characters at table font size).
+  static const double _groupColumnMinWidth = 200;
 
   bool _loading = true;
   bool _pulling = false;
@@ -475,20 +476,22 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
 
   Widget _dataRow(LocalLedgerEntry entry) {
     return GestureDetector(
+      key: Key('ledger_row_${entry.billNo}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _viewBill(entry),
       child: IntrinsicHeight(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          key: Key('ledger_row_flex_${entry.billNo}'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
           _cell('${entry.billNo}', flex: 6),
           _cell(_formatDate(entry.date), flex: 7),
           _cell(entry.customerName, flex: 9),
           _cell(
-            entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
+            LedgerGroupDisplay.formatForDisplay(entry.groupSummary),
             flex: 9,
             minWidth: _groupColumnMinWidth,
-            wrap: true,
+            multiline: true,
           ),
           _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
           _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
@@ -544,14 +547,19 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     bool bold = false,
     bool alignRight = false,
     double? minWidth,
-    bool wrap = false,
+    bool multiline = false,
   }) {
+    final alignment = alignRight
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
+
     return Expanded(
       flex: flex,
       child: ConstrainedBox(
         constraints: BoxConstraints(minWidth: minWidth ?? 0),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+          alignment: alignment,
           decoration: const BoxDecoration(
             border: Border(
               right: BorderSide(color: AppColors.border, width: 0.6),
@@ -561,13 +569,14 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           child: Text(
             text,
             textAlign: alignRight ? TextAlign.right : TextAlign.left,
-            maxLines: wrap ? 2 : (bold ? 2 : 1),
-            softWrap: wrap || bold,
-            overflow: wrap ? TextOverflow.clip : TextOverflow.visible,
+            maxLines: multiline ? null : (bold ? 2 : 1),
+            softWrap: multiline ? false : bold,
+            overflow: multiline ? TextOverflow.clip : TextOverflow.visible,
             style: TextStyle(
               fontSize: AppTextSizes.tableRowText,
               fontWeight: bold ? FontWeight.bold : FontWeight.w500,
               color: AppColors.navy,
+              height: multiline ? 1.15 : null,
             ),
           ),
         ),
