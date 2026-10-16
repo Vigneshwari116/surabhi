@@ -3,9 +3,7 @@ import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
-const _paperWidth = 48;
-const _margin = 8;
-const _contentStart = _margin;
+const _cols = ReceiptService.thermalContentColumns;
 
 SaleBill _sampleBill() {
   return SaleBill(
@@ -29,64 +27,98 @@ SaleBill _sampleBill() {
 
 void main() {
   test('header shows Surabhi Exports centered with address', () {
-    final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final text = lines.join('\n');
 
     expect(text, contains('SURABHI EXPORTS'));
     expect(text, contains('THARGUPET'));
     expect(text, contains('29ACDPJ2452J1ZK'));
     expect(text, contains('BILL NO:133'));
-    expect(text, contains('DATE:13/10/2026'));
-    _expectLinesWithinThermalWidth(text);
-    _expectBalancedMargins(text);
+    expect(text, contains('13/10/2026'));
+    expect(text, isNot(contains('DATE:')));
+    _expectLinesWithinWidth(lines);
+
+    final title = lines.first;
+    final gstinLine = lines.firstWhere((line) => line.contains('GSTIN:'));
+    _expectCentered(title);
+    _expectCentered(gstinLine);
   });
 
-  test('item table includes spaced SNO and GROUP columns', () {
-    final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
+  test('item table includes SNO and GROUP columns on each row', () {
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
-      (line) => line.contains('Shirt') && line.contains('50.00'),
+      (line) => line.trimLeft().startsWith('1') && line.contains('50.00'),
     );
 
-    expect(header.length, _paperWidth);
-    expect(itemLine.length, _paperWidth);
-    expect(header.trim(), contains('SNO'));
-    expect(header.trim(), contains('GROUP'));
-    expect(header.trim(), isNot(contains('SNOGROUP')));
+    expect(header.length, _cols);
+    expect(itemLine.length, _cols);
+    expect(header.substring(0, 3), 'SNO');
+    expect(header.substring(3, 14).trim(), 'GROUP');
+    expect(itemLine.substring(3, 14).trim(), 'Shirt');
 
-    final content = header.trim();
-    final snoEnd = content.indexOf('GROUP');
-    expect(snoEnd, greaterThan(3));
-
-    _expectLinesWithinThermalWidth(lines.join('\n'));
-    _expectBalancedMargins(lines.join('\n'));
+    _expectLinesWithinWidth(lines);
   });
 
-  test('receipt shows per-item gst line', () {
+  test('group column fits GENTS WEAR without truncation', () {
+    final bill = SaleBill(
+      billNo: 239,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 16),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'GENTS WEAR', qty: 4, rate: 23),
+      ],
+      totalQty: 4,
+      totalAmount: 88,
+      totalCgst: 2,
+      totalSgst: 2,
+      totalIgst: 0,
+      grandTotal: 92,
+    );
+
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final itemLine = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
+    expect(itemLine.substring(3, 14).trim(), 'GENTS WEAR');
+    _expectLinesWithinWidth(lines);
+  });
+
+  test('receipt shows per-item gst line with separated cgst and sgst', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
-    expect(text, contains('CGST% 2.5'));
-    expect(text, contains('SGST% 2.5'));
+    expect(text, contains('CGST% 2.5  SGST% 2.5'));
     expect(text, contains('GRAND TOTAL'));
+    expect(text, contains('TOTAL PCS'));
+    expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
+  });
+
+  test('separator lines are exactly content width', () {
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
+    final dashes = lines.where((line) => line == '-' * _cols).toList();
+    expect(dashes, isNotEmpty);
+    for (final line in dashes) {
+      expect(line.length, _cols);
+    }
   });
 }
 
-void _expectLinesWithinThermalWidth(String text) {
-  for (final line in text.split('\n')) {
+void _expectLinesWithinWidth(List<String> lines) {
+  for (final line in lines) {
     expect(
       line.length,
-      lessThanOrEqualTo(_paperWidth),
+      lessThanOrEqualTo(_cols),
       reason: 'Line exceeds thermal width: "$line"',
     );
   }
 }
 
-void _expectBalancedMargins(String text) {
-  for (final line in text.split('\n')) {
-    if (line.trim().isEmpty) {
-      continue;
-    }
-    expect(line.length, _paperWidth);
-    expect(line.substring(0, _margin), equals(' ' * _margin));
-    expect(line.substring(_paperWidth - _margin), equals(' ' * _margin));
-  }
+void _expectCentered(String line) {
+  expect(line.length, _cols);
+  final trimmed = line.trim();
+  final start = line.indexOf(trimmed);
+  final end = start + trimmed.length;
+  final leftPad = start;
+  final rightPad = line.length - end;
+  expect((leftPad - rightPad).abs(), lessThanOrEqualTo(1));
 }

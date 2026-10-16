@@ -1,6 +1,6 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/services/bill_print_service.dart';
@@ -24,9 +24,23 @@ SaleBill _sampleBill() {
   );
 }
 
+Printer _printer({
+  required String name,
+  String url = '',
+  bool isDefault = false,
+  bool isAvailable = true,
+}) {
+  return Printer(
+    name: name,
+    url: url,
+    isDefault: isDefault,
+    isAvailable: isAvailable,
+  );
+}
+
 void main() {
   test('name and mobile lines are consecutive without blank lines', () {
-    final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final nameIndex = lines.indexWhere((line) => line.startsWith('NAME:'));
     final mobileIndex = lines.indexWhere((line) => line.startsWith('MOBILE:'));
 
@@ -36,42 +50,81 @@ void main() {
   });
 
   test('receipt footer lines are present after grand total', () {
-    final text = ReceiptService.buildReceiptText(_sampleBill());
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
+    final text = lines.join('\n');
 
     expect(text, contains('TERMS AND CONDITION'));
     expect(text, contains('AMOUNT NOT REFUND'));
     expect(text, contains('THANK YOU VISIT AGAIN'));
+    expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
 
     final grandTotalIndex = text.lastIndexOf('GRAND TOTAL');
     final footerIndex = text.indexOf('TERMS AND CONDITION');
     expect(footerIndex, greaterThan(grandTotalIndex));
   });
 
-  test('bill pdf matches bar-and-rest 78mm thermal layout', () async {
-    TestWidgetsFlutterBinding.ensureInitialized();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', (message) async {
-      final key = const StringCodec().decodeMessage(message);
-      if (key == 'assets/fonts/consolas.ttf') {
-        return Uint8List.fromList([0, 1, 2, 3]);
-      }
-      return null;
-    });
-
+  test('thermal pdf uses 66mm page width and dynamic height', () async {
     final bill = _sampleBill();
-    final bytes = await BillPrintService.buildDesktopPdfBytes(bill);
+    final receiptLines = ReceiptService.buildReceiptLines(bill);
+    final bytes = await BillPrintService.buildPdfBytes(bill);
+    final pageFormat = BillPrintService.pageFormatForBill(bill);
     final pdfText = String.fromCharCodes(bytes);
 
     expect(bytes, isNotEmpty);
-    expect(bytes.length, greaterThan(500));
     expect(pdfText, contains('/MediaBox'));
-    expect(pdfText, contains('SURABHI EXPORTS'));
-    expect(pdfText, contains('GRAND TOTAL'));
+    final mediaBoxMatch =
+        RegExp(r'/MediaBox\[0 0 ([\d.]+) ([\d.]+)\]').firstMatch(pdfText);
+    expect(mediaBoxMatch, isNotNull);
+    final pageWidthPt = double.parse(mediaBoxMatch!.group(1)!);
+    final pageHeightPt = double.parse(mediaBoxMatch.group(2)!);
 
-    final pageFormat = BillPrintService.pageFormatForBill(bill);
-    expect(pageFormat.width, closeTo(78 * PdfPageFormat.mm, 1.0));
+    final expectedWidthPt =
+        BillPrintService.thermalPdfPageWidthMm * PdfPageFormat.mm;
+    expect(pageWidthPt, closeTo(pageFormat.width, 1.0));
+    expect(pageWidthPt, closeTo(expectedWidthPt, 1.5));
 
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', null);
+    var expectedHeightMm = BillPrintService.thermalPdfMarginTopMm +
+        BillPrintService.thermalPdfMarginBottomMm;
+    for (final line in receiptLines) {
+      final trimmed = line.trim();
+      if (trimmed == ReceiptService.businessName) {
+        expectedHeightMm += BillPrintService.thermalHeaderLineSpacingMm;
+      } else if (trimmed.startsWith('GRAND TOTAL')) {
+        expectedHeightMm += BillPrintService.thermalGrandTotalLineSpacingMm;
+      } else {
+        expectedHeightMm += BillPrintService.thermalLineSpacingMm;
+      }
+    }
+    final actualHeightMm = pageHeightPt / PdfPageFormat.mm;
+    expect(actualHeightMm, closeTo(expectedHeightMm, 1.0));
+  });
+
+  group('resolveTargetPrinter', () {
+    test('exact name match', () {
+      final printers = [
+        _printer(name: 'Kitchen'),
+        _printer(name: 'RP3200', url: 'winspool'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'RP3200',
+      );
+
+      expect(resolved?.name, 'RP3200');
+    });
+
+    test('fuzzy name match when exact name missing', () {
+      final printers = [
+        _printer(name: 'TVS RP3200 Series'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'rp3200',
+      );
+
+      expect(resolved?.name, 'TVS RP3200 Series');
+    });
   });
 }

@@ -7,32 +7,39 @@ class ReceiptService {
   static const String businessName = businessDisplayName;
   static const String gstin = '29ACDPJ2452J1ZK';
 
-  /// TVS RP3200 Font A — 48 columns on 80mm paper.
-  static const int _paperWidth = 48;
+  /// Monospace columns for bill text (~66 mm PDF printable area).
+  static const int thermalContentColumns = 32;
 
-  /// Content width with equal left/right margins on the roll.
-  static const int _contentWidth = 32;
-  static const int _margin = (_paperWidth - _contentWidth) ~/ 2;
+  static const int _contentWidth = thermalContentColumns;
+
+  /// Bill no + date line uses 30 cols (2 spare vs printable width).
+  static const int _billDateLineMaxChars = 30;
 
   static const int _snoW = 3;
-  static const int _gapW = 1;
-  static const int _partW = 9;
-  static const int _rateW = 6;
+  static const int _groupW = 11;
+  static const int _rateW = 5;
   static const int _qtyW = 4;
   static const int _amountW =
-      _contentWidth - _snoW - _gapW - _partW - _rateW - _qtyW;
+      _contentWidth - _snoW - _groupW - _rateW - _qtyW;
   static const int _labelW = _contentWidth - _amountW;
 
   static String buildReceiptText(SaleBill bill) {
+    return buildReceiptLines(bill).join('\n');
+  }
+
+  static List<String> buildReceiptLines(SaleBill bill) {
     final code = locationCodeFromDisplayName(bill.location);
-    return _buildOriginalFormat(bill, code).trimRight();
+    return _buildOriginalFormat(bill, code);
   }
 
   /// True for shop header/footer lines that should be centered on thermal
-  /// (ESC/POS align center), matching bar/restaurant receipt style.
+  /// (ESC/POS align center).
   static bool isThermalCenteredLine(String rawLine) {
     final trimmed = rawLine.trim();
     if (trimmed.isEmpty) {
+      return false;
+    }
+    if (trimmed.startsWith('-')) {
       return false;
     }
     if (trimmed.contains(businessName)) {
@@ -44,71 +51,63 @@ class ReceiptService {
     if (trimmed.contains('THANK YOU VISIT AGAIN')) {
       return true;
     }
-    if (trimmed.startsWith('-')) {
-      return false;
+    if (rawLine.isNotEmpty && rawLine[0] == ' ') {
+      final start = rawLine.indexOf(trimmed);
+      final end = start + trimmed.length;
+      final leftPad = start;
+      final rightPad = rawLine.length - end;
+      return rawLine.length == _contentWidth &&
+          (leftPad - rightPad).abs() <= 1;
     }
-    final leading = rawLine.length - rawLine.trimLeft().length;
-    final trailing = rawLine.length - rawLine.trimRight().length;
-    return leading >= _margin && trailing >= _margin;
+    return false;
   }
 
   /// Original thermal layout — dashed separators, per-item CGST/SGST lines.
-  static String _buildOriginalFormat(SaleBill bill, String locationCode) {
-    final buffer = StringBuffer();
-    final dateText = DateFormat('dd/MM/yyyy').format(bill.billDate);
+  static List<String> _buildOriginalFormat(
+    SaleBill bill,
+    String locationCode,
+  ) {
+    final lines = <String>[];
     final profile = _locationProfile(locationCode);
-    final line = _formatLeft('-' * _contentWidth);
+    final separator = _separatorLine();
 
-    buffer.writeln(_formatCentered(_center(businessName)));
-    for (final addressLine in _addressLines(profile.addressLine)) {
-      buffer.writeln(_formatCentered(_center(addressLine)));
+    lines.add(_lineCentered(businessName));
+    for (final addressLine in _wrapToWidth(profile.addressLine, _contentWidth)) {
+      lines.add(_lineCentered(addressLine));
     }
-    buffer.writeln(_formatCentered(_center('GSTIN:$gstin')));
-    buffer.writeln(_formatLeft(_billDateLine(bill.billNo, dateText)));
-    buffer.writeln(_formatLeft(_fieldLine('NAME', bill.customerName)));
-    buffer.writeln(_formatLeft(_fieldLine('MOBILE', bill.mobile)));
-    buffer.writeln(line);
-    buffer.writeln(_formatLeft(_itemHeader()));
-    buffer.writeln(line);
+    for (final gstinLine in _wrapToWidth('GSTIN:$gstin', _contentWidth)) {
+      lines.add(_lineCentered(gstinLine));
+    }
+    lines.add(_line(_billDateLine(bill.billNo, bill.billDate)));
+    lines.add(_line(_fieldLine('NAME', bill.customerName)));
+    lines.add(_line(_fieldLine('MOBILE', bill.mobile)));
+    lines.add(separator);
+    lines.add(_line(_itemHeader()));
+    lines.add(separator);
 
-    for (var i = 0; i < bill.items.length; i++) {
-      final item = bill.items[i];
-      buffer.writeln(_formatLeft(_itemLine(i + 1, item)));
-      buffer.writeln(line);
-      buffer.writeln(_formatLeft(_itemGstLine(item)));
-      buffer.writeln(line);
+    for (var index = 0; index < bill.items.length; index++) {
+      final item = bill.items[index];
+      for (final row in _itemLines(item, index + 1)) {
+        lines.add(_line(row));
+      }
+      lines.add(separator);
+      lines.addAll(_itemGstLines(item));
+      lines.add(separator);
     }
 
-    buffer.writeln(_formatLeft(_totalLine(bill.totalQty, bill.grandTotal)));
-    buffer.writeln(_formatLeft(_rightAmountLine('CGST', bill.totalCgst)));
-    buffer.writeln(_formatLeft(_rightAmountLine('SGST', bill.totalSgst)));
-    buffer.writeln(line);
-    buffer.writeln(_formatLeft(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
-    buffer.writeln(line);
-    _writeFooter(buffer);
-    return buffer.toString();
+    lines.add(_line(_totalLine(bill.totalQty, bill.totalAmount)));
+    lines.add(_line(_rightAmountLine('CGST', bill.totalCgst)));
+    lines.add(_line(_rightAmountLine('SGST', bill.totalSgst)));
+    lines.add(separator);
+    lines.add(_line(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
+    lines.add(separator);
+    lines.add(_line('TERMS AND CONDITION'));
+    lines.add(_line('AMOUNT NOT REFUND'));
+    lines.add(_lineCentered('THANK YOU VISIT AGAIN'));
+    return lines;
   }
 
-  static List<String> _addressLines(String address) {
-    final trimmed = address.trim();
-    if (trimmed.length <= _contentWidth) {
-      return [trimmed];
-    }
-    final parts = trimmed.split(',');
-    if (parts.length >= 2) {
-      final mid = parts.length ~/ 2;
-      final line1 = parts.sublist(0, mid).join(',').trim();
-      final line2 = parts.sublist(mid).join(',').trim();
-      return [line1, line2];
-    }
-    return [trimmed.substring(0, _contentWidth)];
-  }
-
-  static void _writeFooter(StringBuffer buffer) {
-    buffer.writeln(_formatLeft('TERMS AND CONDITION'));
-    buffer.writeln(_formatLeft('AMOUNT NOT REFUND'));
-    buffer.writeln(_formatCentered(_center('THANK YOU VISIT AGAIN')));
-  }
+  static String _separatorLine() => '-' * _contentWidth;
 
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
@@ -117,34 +116,109 @@ class ReceiptService {
     );
   }
 
+  static List<String> _wrapToWidth(String text, int width) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      return const [];
+    }
+    if (trimmed.length <= width) {
+      return [trimmed];
+    }
+
+    final normalized = trimmed.replaceAll(',', ', ');
+    final tokens = normalized.split(RegExp(r'\s+'));
+    final lines = <String>[];
+    var current = '';
+
+    for (final token in tokens) {
+      if (token.isEmpty) {
+        continue;
+      }
+      final candidate = current.isEmpty ? token : '$current $token';
+      if (candidate.length <= width) {
+        current = candidate;
+        continue;
+      }
+      if (current.isNotEmpty) {
+        lines.add(current);
+        current = '';
+      }
+      if (token.length <= width) {
+        current = token;
+      } else {
+        var remaining = token;
+        while (remaining.length > width) {
+          lines.add(remaining.substring(0, width));
+          remaining = remaining.substring(width);
+        }
+        current = remaining;
+      }
+    }
+
+    if (current.isNotEmpty) {
+      lines.add(current);
+    }
+    return lines;
+  }
+
   static String _itemHeader() {
     return '${_padRight('SNO', _snoW)}'
-        '${' ' * _gapW}'
-        '${_padRight('GROUP', _partW)}'
+        '${_padRight('GROUP', _groupW)}'
         '${_padRight('RATE', _rateW)}'
         '${_padRight('QTY', _qtyW)}'
         '${_padLeft('AMOUNT', _amountW)}';
   }
 
-  static String _itemLine(int sno, BillItem item) {
-    final particular = item.particular.trim();
-    return '${_padRight('$sno', _snoW)}'
-        '${' ' * _gapW}'
-        '${_padRight(particular, _partW)}'
+  static List<String> _itemLines(BillItem item, int serialNo) {
+    final group = item.particular.trim();
+    if (group.isEmpty) {
+      return [_itemLine(serialNo, 'ITEM', item)];
+    }
+    if (group.length <= _groupW) {
+      return [_itemLine(serialNo, group, item)];
+    }
+
+    final rows = <String>[_itemLine(serialNo, group.substring(0, _groupW), item)];
+    var remainder = group.substring(_groupW);
+    while (remainder.isNotEmpty) {
+      final chunk = remainder.length > _groupW
+          ? remainder.substring(0, _groupW)
+          : remainder;
+      remainder =
+          remainder.length > _groupW ? remainder.substring(_groupW) : '';
+      rows.add(_groupContinuationLine(chunk));
+    }
+    return rows;
+  }
+
+  static String _itemLine(int serialNo, String groupLabel, BillItem item) {
+    return '${_padRight('$serialNo', _snoW)}'
+        '${_padRight(groupLabel, _groupW)}'
         '${_padRight(_rate(item.rate), _rateW)}'
         '${_padRight(_qty(item.qty), _qtyW)}'
         '${_padLeft(_amount(item.grossAmt), _amountW)}';
   }
 
-  static String _itemGstLine(BillItem item) {
-    return 'CGST% ${_formatPct(item.cgstPct)} '
-        'SGST% ${_formatPct(item.sgstPct)}';
+  static String _groupContinuationLine(String chunk) {
+    return '${_padRight('', _snoW)}'
+        '${_padRight(chunk, _groupW)}'
+        '${_padRight('', _rateW + _qtyW + _amountW)}';
   }
 
-  static String _totalLine(double qty, double grandTotal) {
-    final left = _padRight('TOTAL', _snoW + _gapW + _partW + _rateW);
+  static List<String> _itemGstLines(BillItem item) {
+    final cgstPart = 'CGST% ${_formatPct(item.cgstPct)}';
+    final sgstPart = 'SGST% ${_formatPct(item.sgstPct)}';
+    final combined = '$cgstPart  $sgstPart';
+    if (combined.length <= _contentWidth) {
+      return [_line(combined)];
+    }
+    return [_line(cgstPart), _line(sgstPart)];
+  }
+
+  static String _totalLine(double qty, double taxableTotal) {
+    final left = _padRight('TOTAL PCS', _snoW + _groupW + _rateW);
     final qtyPart = _padRight(_qty(qty), _qtyW);
-    final amountPart = _padLeft(_amount(grandTotal), _amountW);
+    final amountPart = _padLeft(_amount(taxableTotal), _amountW);
     return '$left$qtyPart$amountPart';
   }
 
@@ -158,56 +232,49 @@ class ReceiptService {
     return text.isEmpty ? '$label:' : '$label:$text';
   }
 
-  static String _billDateLine(int billNo, String dateText) {
+  static String _billDateLine(int billNo, DateTime billDate) {
     final left = 'BILL NO:$billNo';
-    final right = 'DATE:$dateText';
-    final gap = _contentWidth - left.length - right.length;
-    if (gap < 1) {
-      final maxLeft = _contentWidth - right.length - 1;
-      final trimmedLeft =
-          left.length > maxLeft ? left.substring(0, maxLeft) : left;
-      final adjustedGap = _contentWidth - trimmedLeft.length - right.length;
-      return '$trimmedLeft${' ' * adjustedGap}$right';
+    final dateFormats = [
+      DateFormat('dd/MM/yyyy'),
+      DateFormat('dd/MM/yy'),
+    ];
+
+    for (final format in dateFormats) {
+      final dateText = format.format(billDate);
+      final gap = _billDateLineMaxChars - left.length - dateText.length;
+      if (gap >= 1) {
+        return '$left${' ' * gap}$dateText';
+      }
     }
-    return '$left${' ' * gap}$right';
+
+    final dateText = DateFormat('dd/MM/yy').format(billDate);
+    final maxLeft = _billDateLineMaxChars - dateText.length - 1;
+    final trimmedLeft =
+        left.length > maxLeft ? left.substring(0, maxLeft) : left;
+    final gap = _billDateLineMaxChars - trimmedLeft.length - dateText.length;
+    return '$trimmedLeft${' ' * gap}$dateText';
   }
 
-  /// Left-aligns [content] within the printable area with equal side margins.
-  static String _formatLeft(String content) {
+  static String _line(String content) {
     final trimmed = content.trimRight();
-    if (trimmed.length > _contentWidth) {
-      return '${' ' * _margin}${trimmed.substring(0, _contentWidth)}'
-          '${' ' * _margin}';
+    if (trimmed.length <= _contentWidth) {
+      return trimmed;
     }
-    final rightPad = _paperWidth - _margin - trimmed.length;
-    return '${' ' * _margin}$trimmed${' ' * rightPad}';
+    return trimmed.substring(0, _contentWidth);
   }
 
-  /// Centers [content] within the printable area and pads to [_paperWidth].
-  static String _formatCentered(String content) {
-    final trimmed = content.trimRight();
-    if (trimmed.isEmpty) {
-      return ' ' * _paperWidth;
+  static String _lineCentered(String content) {
+    final clipped = _line(content);
+    if (clipped.isEmpty) {
+      return ' ' * _contentWidth;
     }
-    if (trimmed.length > _contentWidth) {
-      return '${' ' * _margin}${trimmed.substring(0, _contentWidth)}'
-          '${' ' * _margin}';
+    if (clipped.length >= _contentWidth) {
+      return clipped.substring(0, _contentWidth);
     }
-    final leftPad = _margin + ((_contentWidth - trimmed.length) / 2).floor();
-    final rightPad = _paperWidth - leftPad - trimmed.length;
-    return '${' ' * leftPad}$trimmed${' ' * rightPad}';
-  }
-
-  static String _center(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    if (trimmed.length >= _contentWidth) {
-      return trimmed.substring(0, _contentWidth);
-    }
-    final pad = ((_contentWidth - trimmed.length) / 2).floor();
-    return '${' ' * pad}$trimmed';
+    final pad = _contentWidth - clipped.length;
+    final left = pad ~/ 2;
+    final right = pad - left;
+    return '${' ' * left}$clipped${' ' * right}';
   }
 
   static String _padRight(String text, int width) {
@@ -232,7 +299,7 @@ class ReceiptService {
     if (value == value.roundToDouble()) {
       return value.toInt().toString();
     }
-    return value.toString();
+    return value.toStringAsFixed(2);
   }
 
   static String _rate(double value) {
