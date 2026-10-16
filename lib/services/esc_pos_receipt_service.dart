@@ -65,6 +65,17 @@ class EscPosReceiptService {
           ..addAll(_boldOn);
         continue;
       }
+      if (_isGrandTotalLine(line)) {
+        bytes
+          ..addAll(_alignLeft)
+          ..addAll(_boldOn);
+        bytes.addAll(_encodeLine(line));
+        bytes
+          ..add(0x0A)
+          ..addAll(_normalSize)
+          ..addAll(_boldOn);
+        continue;
+      }
       if (ReceiptService.isThermalCenteredLine(line)) {
         bytes
           ..addAll(_alignCenter)
@@ -107,6 +118,10 @@ class EscPosReceiptService {
   static bool _isBusinessTitleLine(String line) {
     final trimmed = line.trim();
     return trimmed.contains(ReceiptService.businessName);
+  }
+
+  static bool _isGrandTotalLine(String line) {
+    return line.trimLeft().startsWith('GRAND TOTAL');
   }
 
   static String _normalizedReceiptText(String text) {

@@ -24,11 +24,12 @@ class BillPrintService {
       thermalPdfMarginRightMm;
 
   static const double thermalFontSizePt = 9.0;
-  static const double thermalHeaderFontSizePt = 11.5;
-  static const double thermalGrandTotalFontSizePt = 10.5;
+  static const double thermalHeaderFontSizePt = 14.0;
+  static const double thermalGrandTotalLabelFontSizePt = 10.5;
+  static const double thermalGrandTotalAmountFontSizePt = 13.0;
   static const double thermalLineSpacingMm = 4.25;
-  static const double thermalHeaderLineSpacingMm = 5.0;
-  static const double thermalGrandTotalLineSpacingMm = 4.75;
+  static const double thermalHeaderLineSpacingMm = 6.0;
+  static const double thermalGrandTotalLineSpacingMm = 5.25;
 
   /// Kept for callers that reference roll width (66 mm thermal PDF).
   static const double thermalPageWidthMm = thermalPdfPageWidthMm;
@@ -282,19 +283,17 @@ class BillPrintService {
     if (trimmed == ReceiptService.businessName) {
       return base.copyWith(fontSize: thermalHeaderFontSizePt);
     }
-    if (trimmed.startsWith('GRAND TOTAL')) {
-      return base.copyWith(fontSize: thermalGrandTotalFontSizePt);
-    }
     return base;
   }
 
-  static pw.Alignment _alignmentForLine(String line) {
+  static bool _isGrandTotalLine(String line) {
+    return line.trimLeft().startsWith('GRAND TOTAL');
+  }
+
+  static String? _grandTotalAmount(String line) {
     final trimmed = line.trim();
-    if (trimmed == ReceiptService.businessName ||
-        trimmed.contains('THANK YOU VISIT AGAIN')) {
-      return pw.Alignment.center;
-    }
-    return pw.Alignment.centerLeft;
+    final match = RegExp(r'^GRAND TOTAL\s+(\S+)$').firstMatch(trimmed);
+    return match?.group(1);
   }
 
   static Future<Uint8List> _buildPdfBytesFromLayout(
@@ -319,10 +318,9 @@ class BillPrintService {
             for (final line in layout.lines)
               _thermalLineWidget(
                 line: line,
-                style: _styleForLine(line, baseStyle),
+                baseStyle: baseStyle,
                 printableWidthMm: layout.printableWidthMm,
                 lineHeightMm: _lineHeightMmFor(line, layout.lineHeightMm),
-                alignment: _alignmentForLine(line),
               ),
           ],
         ),
@@ -334,21 +332,67 @@ class BillPrintService {
 
   static pw.Widget _thermalLineWidget({
     required String line,
-    required pw.TextStyle style,
+    required pw.TextStyle baseStyle,
     required double printableWidthMm,
     required double lineHeightMm,
-    required pw.Alignment alignment,
   }) {
-    final text = line.isEmpty ? ' ' : line;
+    final trimmed = line.trim();
+    final boxWidth = printableWidthMm * PdfPageFormat.mm;
+    final boxHeight = lineHeightMm * PdfPageFormat.mm;
+
+    if (trimmed == ReceiptService.businessName) {
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Center(
+          child: pw.Text(
+            trimmed,
+            style: baseStyle.copyWith(fontSize: thermalHeaderFontSizePt),
+            maxLines: 1,
+            softWrap: false,
+            overflow: pw.TextOverflow.clip,
+          ),
+        ),
+      );
+    }
+
+    final grandTotalAmount = _grandTotalAmount(line);
+    if (grandTotalAmount != null) {
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Text(
+              'GRAND TOTAL',
+              style: baseStyle.copyWith(
+                fontSize: thermalGrandTotalLabelFontSizePt,
+              ),
+            ),
+            pw.Text(
+              grandTotalAmount,
+              style: baseStyle.copyWith(
+                fontSize: thermalGrandTotalAmountFontSizePt,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final thankYou = trimmed.contains('THANK YOU VISIT AGAIN');
+    final text = thankYou ? trimmed : (line.isEmpty ? ' ' : line);
 
     return pw.SizedBox(
-      width: printableWidthMm * PdfPageFormat.mm,
-      height: lineHeightMm * PdfPageFormat.mm,
+      width: boxWidth,
+      height: boxHeight,
       child: pw.Align(
-        alignment: alignment,
+        alignment: thankYou ? pw.Alignment.center : pw.Alignment.centerLeft,
         child: pw.Text(
           text,
-          style: style,
+          style: baseStyle,
           maxLines: 1,
           softWrap: false,
           overflow: pw.TextOverflow.clip,
