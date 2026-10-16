@@ -108,7 +108,6 @@ class ReceiptService {
     lines.add(_line(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
     lines.add(separator);
     lines.add(_line('TERMS AND CONDITION'));
-    lines.add(_line('EXCHANGE ONLY 3 DAYS'));
     lines.add(_line('AMOUNT NOT REFUND'));
     lines.add(_lineCentered('THANK YOU VISIT AGAIN'));
     return lines;

@@ -23,6 +23,8 @@ class BillPrintService {
 
   static double thermalFontSizePt() => ReceiptLayout.bodyFontSizePt();
   static const double thermalLineSpacingMm = 4.25;
+  static const double thermalHeaderLineSpacingMm = 6.0;
+  static const double thermalGrandTotalLineSpacingMm = 5.25;
 
   static Future<String> saveReceiptToDesktop(SaleBill bill) async {
     final text = ReceiptService.buildReceiptText(bill);
@@ -196,7 +198,7 @@ class BillPrintService {
     if (type == PrinterType.thermal) {
       final contentHeightMm = lines.isEmpty
           ? thermalPdfMarginTopMm + thermalPdfMarginBottomMm
-          : lines.length * lineHeightMm +
+          : _sumLineHeights(lines, lineHeightMm) +
               thermalPdfMarginTopMm +
               thermalPdfMarginBottomMm;
 
@@ -250,11 +252,41 @@ class BillPrintService {
     );
   }
 
+  static double _sumLineHeights(List<String> lines, double baseLineHeightMm) {
+    var total = 0.0;
+    for (final line in lines) {
+      total += _lineHeightMmFor(line, baseLineHeightMm);
+    }
+    return total;
+  }
+
+  static double _lineHeightMmFor(String line, double baseLineHeightMm) {
+    final trimmed = line.trim();
+    if (trimmed == ReceiptService.businessName) {
+      return thermalHeaderLineSpacingMm;
+    }
+    if (trimmed.startsWith('GRAND TOTAL')) {
+      return thermalGrandTotalLineSpacingMm;
+    }
+    return baseLineHeightMm;
+  }
+
+  static String? _grandTotalAmount(String line) {
+    if (!line.trimLeft().startsWith('GRAND TOTAL')) {
+      return null;
+    }
+    final trimmed = line.trimRight();
+    if (trimmed.length < ReceiptLayout.amountWidth) {
+      return null;
+    }
+    return trimmed.substring(trimmed.length - ReceiptLayout.amountWidth).trim();
+  }
+
   static Future<Uint8List> _buildPdfBytesFromLayout(
     _ReceiptPdfLayout layout,
   ) async {
     final doc = pw.Document();
-    final style = pw.TextStyle(
+    final baseStyle = pw.TextStyle(
       font: pw.Font.courierBold(),
       fontSize: layout.fontSize,
       lineSpacing: 0,
@@ -272,9 +304,9 @@ class BillPrintService {
             for (final line in layout.lines)
               _thermalLineWidget(
                 line: line,
-                style: style,
+                baseStyle: baseStyle,
                 printableWidthMm: layout.printableWidthMm,
-                lineHeightMm: layout.lineHeightMm,
+                lineHeightMm: _lineHeightMmFor(line, layout.lineHeightMm),
               ),
           ],
         ),
@@ -286,20 +318,67 @@ class BillPrintService {
 
   static pw.Widget _thermalLineWidget({
     required String line,
-    required pw.TextStyle style,
+    required pw.TextStyle baseStyle,
     required double printableWidthMm,
     required double lineHeightMm,
   }) {
-    final text = line.isEmpty ? ' ' : line;
+    final trimmed = line.trim();
+    final boxWidth = printableWidthMm * PdfPageFormat.mm;
+    final boxHeight = lineHeightMm * PdfPageFormat.mm;
+
+    if (trimmed == ReceiptService.businessName) {
+      final fontSize =
+          ReceiptLayout.shopNameFontSizePt(ReceiptService.businessName);
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Center(
+          child: pw.Text(
+            trimmed,
+            style: baseStyle.copyWith(fontSize: fontSize),
+            maxLines: 1,
+            softWrap: false,
+            overflow: pw.TextOverflow.clip,
+          ),
+        ),
+      );
+    }
+
+    final grandTotalAmount = _grandTotalAmount(line);
+    if (grandTotalAmount != null) {
+      final fonts = ReceiptLayout.grandTotalFontSizes(grandTotalAmount);
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Text(
+              'GRAND TOTAL',
+              style: baseStyle.copyWith(fontSize: fonts.labelPt),
+            ),
+            pw.Text(
+              grandTotalAmount,
+              style: baseStyle.copyWith(fontSize: fonts.amountPt),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final thankYou = trimmed.contains('THANK YOU VISIT AGAIN');
+    final text = thankYou ? trimmed : (line.isEmpty ? ' ' : line);
 
     return pw.SizedBox(
-      width: printableWidthMm * PdfPageFormat.mm,
-      height: lineHeightMm * PdfPageFormat.mm,
+      width: boxWidth,
+      height: boxHeight,
       child: pw.Align(
-        alignment: pw.Alignment.centerLeft,
+        alignment:
+            thankYou ? pw.Alignment.center : pw.Alignment.centerLeft,
         child: pw.Text(
           text,
-          style: style,
+          style: baseStyle,
           maxLines: 1,
           softWrap: false,
           overflow: pw.TextOverflow.clip,

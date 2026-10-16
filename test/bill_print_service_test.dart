@@ -55,7 +55,7 @@ void main() {
     final text = lines.join('\n');
 
     expect(text, contains('TERMS AND CONDITION'));
-    expect(text, contains('EXCHANGE ONLY 3 DAYS'));
+    expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
     expect(text, contains('AMOUNT NOT REFUND'));
     expect(text, contains('THANK YOU VISIT AGAIN'));
 
@@ -67,7 +67,7 @@ void main() {
   test('thermal pdf uses 66mm page width, computed font, and dynamic height',
       () async {
     final bill = _sampleBill();
-    final lineCount = ReceiptService.buildReceiptLines(bill).length;
+    final receiptLines = ReceiptService.buildReceiptLines(bill);
     final bytes = await BillPrintService.buildPdfBytes(bill);
     final pageFormat = BillPrintService.pageFormatForBill(bill);
     final pdfText = String.fromCharCodes(bytes);
@@ -97,9 +97,18 @@ void main() {
       ReceiptLayout.bodyFontSizePt(),
     );
 
-    final expectedHeightMm = lineCount * BillPrintService.thermalLineSpacingMm +
-        BillPrintService.thermalPdfMarginTopMm +
+    var expectedHeightMm = BillPrintService.thermalPdfMarginTopMm +
         BillPrintService.thermalPdfMarginBottomMm;
+    for (final line in receiptLines) {
+      final trimmed = line.trim();
+      if (trimmed == ReceiptService.businessName) {
+        expectedHeightMm += BillPrintService.thermalHeaderLineSpacingMm;
+      } else if (trimmed.startsWith('GRAND TOTAL')) {
+        expectedHeightMm += BillPrintService.thermalGrandTotalLineSpacingMm;
+      } else {
+        expectedHeightMm += BillPrintService.thermalLineSpacingMm;
+      }
+    }
     final actualHeightMm = pageHeightPt / PdfPageFormat.mm;
     expect(actualHeightMm, closeTo(expectedHeightMm, 1.0));
   });

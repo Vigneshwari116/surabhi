@@ -56,7 +56,7 @@ void main() {
     _expectCentered(gstinLine);
   });
 
-  test('item table has 29 columns with gaps between every column', () {
+  test('item table has 30 columns with gaps between every column', () {
     final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final header = lines.firstWhere((line) => line.contains('GROUP'));
     final itemLine = lines.firstWhere(
@@ -67,15 +67,40 @@ void main() {
     expect(itemLine.length, _cols);
     expect(header.substring(0, 2), 'SN');
     expect(header[2], ' ');
-    expect(header.substring(3, 11).trim(), 'GROUP');
-    expect(header[11], ' ');
-    expect(header.substring(12, 17).trim(), 'RATE');
-    expect(header[17], ' ');
-    expect(header.substring(18, 21).trim(), 'QTY');
-    expect(header[21], ' ');
-    expect(header.substring(22).trim(), 'AMOUNT');
-    expect(itemLine.substring(3, 11).trim(), 'SHIRT');
+    expect(header.substring(3, 13).trim(), 'GROUP');
+    expect(header[13], ' ');
+    expect(header.substring(14, 19).trim(), 'RATE');
+    expect(header[19], ' ');
+    expect(header.substring(20, 23).trim(), 'QTY');
+    expect(header[23], ' ');
+    expect(header.substring(24).trim(), 'AMOUNT');
+    expect(itemLine.substring(3, 13).trim(), 'SHIRT');
 
+    _expectLinesWithinWidth(lines);
+  });
+
+  test('group column fits GENTS WEAR in ten characters', () {
+    final bill = SaleBill(
+      billNo: 239,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 16),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'GENTS WEAR', qty: 4, rate: 23),
+      ],
+      totalQty: 4,
+      totalAmount: 88,
+      totalCgst: 2,
+      totalSgst: 2,
+      totalIgst: 0,
+      grandTotal: 92,
+    );
+
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final itemLine = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
+    expect(itemLine.substring(3, 13).trim(), 'GENTS WEAR');
     _expectLinesWithinWidth(lines);
   });
 
@@ -108,7 +133,7 @@ void main() {
     final text = ReceiptService.buildReceiptText(_sampleBill());
     expect(text, contains('CGST% 2.5  SGST% 2.5'));
     expect(text, contains('GRAND TOTAL'));
-    expect(text, contains('EXCHANGE ONLY 3 DAYS'));
+    expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
     expect(text, contains('50'));
     expect(text, contains('48'));
     expect(text, isNot(contains('50.00')));
@@ -157,7 +182,7 @@ void main() {
     }
   });
 
-  test('group names are uppercase and truncated to eight characters', () {
+  test('group names are uppercase and truncated to ten characters', () {
     final bill = SaleBill(
       billNo: 1,
       location: 'Surabhi',
@@ -177,13 +202,13 @@ void main() {
     );
 
     final text = ReceiptService.buildReceiptText(bill);
-    expect(text, contains('LONGNAME'));
+    expect(text, contains('LONGNAMEIT'));
     expect(text, isNot(contains('longnameitem')));
   });
 
-  test('computed pdf font fits content width for 29 columns', () {
+  test('computed pdf font fits content width for 30 columns', () {
     final fontSize = ReceiptLayout.bodyFontSizePt();
-    expect(fontSize, closeTo(9.0, 0.6));
+    expect(fontSize, closeTo(9.1, 0.6));
 
     final charWidthMm =
         fontSize * ReceiptLayout.courierBoldCharWidthFactor * (25.4 / 72);
@@ -212,9 +237,25 @@ void main() {
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final item = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
-    expect(item.substring(12, 17).trim(), '99999');
+    expect(item.substring(14, 19).trim(), '99999');
     expect(item.substring(_amountStart).length, ReceiptLayout.amountWidth);
     _expectLinesWithinWidth(lines);
+  });
+
+  test('shop name and grand total emphasis fonts fit content width', () {
+    final shopSize =
+        ReceiptLayout.shopNameFontSizePt(ReceiptService.businessName);
+    expect(
+      ReceiptLayout.textWidthMm(ReceiptService.businessName, shopSize),
+      lessThanOrEqualTo(ReceiptLayout.contentWidthMm),
+    );
+    expect(shopSize, closeTo(14.0, 1.5));
+
+    final fonts = ReceiptLayout.grandTotalFontSizes('999999');
+    final totalWidth = ReceiptLayout.textWidthMm('GRAND TOTAL', fonts.labelPt) +
+        ReceiptLayout.textWidthMm('999999', fonts.amountPt);
+    expect(totalWidth, lessThanOrEqualTo(ReceiptLayout.contentWidthMm));
+    expect(fonts.amountPt, closeTo(13.0, 1.5));
   });
 
   test('empty group prints blank spaces keeping columns aligned', () {
@@ -236,7 +277,7 @@ void main() {
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final item = lines.firstWhere((line) => line.trimLeft().startsWith('1'));
-    expect(item.substring(3, 11), '        ');
+    expect(item.substring(3, 13), '          ');
     _expectLinesWithinWidth(lines);
   });
 
