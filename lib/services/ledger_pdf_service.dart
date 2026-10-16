@@ -215,6 +215,7 @@ class LedgerPdfService {
       border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
       columnWidths: {
         3: const pw.FixedColumnWidth(_groupColumnWidthPt),
+        10: const pw.FixedColumnWidth(54),
       },
       defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
       children: rows,

@@ -6,6 +6,7 @@ import 'package:surabhi/screen/admin_month_days_screen.dart';
 import 'package:surabhi/services/report_excel_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 /// Admin cross-location grouped bill report with Excel export.
 class AdminReportScreen extends StatefulWidget {
@@ -269,29 +270,11 @@ class _AdminReportScreenState extends State<AdminReportScreen> {
                       ? const SizedBox.shrink()
                       : !_breakdown!.hasBills
                           ? _buildEmptyState()
-                          : CenteredContent(
-                              maxWidth: 1200,
-                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final needsHScroll =
-                                      constraints.maxWidth < _tableMinWidth;
-                                  final table = _buildTable(_breakdown!);
-
-                                  if (!needsHScroll) {
-                                    return SingleChildScrollView(child: table);
-                                  }
-
-                                  return SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: SingleChildScrollView(
-                                      child: SizedBox(
-                                        width: _tableMinWidth,
-                                        child: table,
-                                      ),
-                                    ),
-                                  );
-                                },
+                          : ReportFullWidthBody(
+                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                              child: ReportScrollArea(
+                                minTableWidth: _tableMinWidth,
+                                child: _buildTable(_breakdown!),
                               ),
                             ),
                 ),
