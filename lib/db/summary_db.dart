@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/db/schema_migrations.dart';
 
 class DaySummaryRow {
   final String location;
@@ -43,6 +44,7 @@ class SummaryDb {
   static SummaryDb? _instance;
 
   Database? _database;
+  Future<Database>? _openFuture;
 
   SummaryDb._();
 
@@ -55,10 +57,11 @@ class SummaryDb {
   static Future<void> resetForTesting() async {
     await _instance?._database?.close();
     _instance?._database = null;
+    _instance?._openFuture = null;
     _instance = null;
   }
 
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
   static const String dbFileName = 'sales_summary.db';
 
   Future<void> initialize() async {
@@ -67,11 +70,18 @@ class SummaryDb {
   }
 
   Future<Database> get database async {
+    if (_database != null && _database!.isOpen) {
+      return _database!;
+    }
     if (_database != null && !_database!.isOpen) {
       _database = null;
+      _openFuture = null;
     }
-    _database ??= await _openDb();
-    return _database!;
+    _openFuture ??= _openDb().then((db) {
+      _database = db;
+      return db;
+    });
+    return _openFuture!;
   }
 
   Future<Database> _openDb() async {
@@ -89,6 +99,9 @@ class SummaryDb {
         }
         if (oldVersion < 2) {
           await _migrateToV2(db);
+        }
+        if (oldVersion < 3) {
+          await _ensureTotalPcsColumns(db);
         }
       },
     );
@@ -124,13 +137,23 @@ class SummaryDb {
     ''');
   }
 
+  Future<void> _ensureTotalPcsColumns(Database db) async {
+    await addColumnIfMissing(
+      db,
+      'day_summary',
+      'total_pcs',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await addColumnIfMissing(
+      db,
+      'month_summary',
+      'total_pcs',
+      'REAL NOT NULL DEFAULT 0',
+    );
+  }
+
   Future<void> _migrateToV2(Database db) async {
-    await db.execute(
-      'ALTER TABLE day_summary ADD COLUMN total_pcs REAL NOT NULL DEFAULT 0',
-    );
-    await db.execute(
-      'ALTER TABLE month_summary ADD COLUMN total_pcs REAL NOT NULL DEFAULT 0',
-    );
+    await _ensureTotalPcsColumns(db);
     await _backfillPcsFromLocationBills(db);
   }
 

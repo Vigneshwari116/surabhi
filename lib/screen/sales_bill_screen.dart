@@ -124,6 +124,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       _tableHeaderHeight + _gridBodyScrollZoneHeight + _gridFooterHeight;
   static const double _bottomBarHeight = 44;
   static const double _desktopChromeEstimate = 320;
+  static const double _entryValidationSlack = 28;
   static const double _gridMinScrollHeight = _gridFrameHeight;
   static const double _todaySalesFrameWidth = 268;
   static const double _gridColWidth = 116;
@@ -849,7 +850,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   static const String _printCode = '777';
 
-  void _rateSubmitted() {
+  Future<void> _rateSubmitted() async {
     final rateText = _rateController.text.trim();
 
     if (rateText == _printCode) {
@@ -859,7 +860,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         return;
       }
       final save = widget.saveBillOverride ?? _saveBill;
-      unawaited(save());
+      await save();
       return;
     }
 
@@ -1575,13 +1576,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final gridFontSize = _gridFontSizeForWidth(constraints.maxWidth);
-        final fitsFixedLayout = constraints.maxHeight >=
-            _desktopChromeEstimate + _gridMinScrollHeight;
+        final minColumnHeight = _desktopChromeEstimate +
+            _gridMinScrollHeight +
+            _entryValidationSlack;
+        final fitsFixedLayout = constraints.maxHeight >= minColumnHeight;
+        final usePageScroll =
+            !fitsFixedLayout || widget.embeddedInDashboard;
 
-        Widget columnChild({
-          required bool expandGrid,
-          double? gridHeight,
-        }) {
+        Widget columnChild() {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1593,12 +1595,25 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 menuContext: context,
               ),
               const SizedBox(height: 4),
-              SizedBox(
-                height: _gridFrameHeight,
-                child: _buildDesktopGridZone(
-                  gridFontSize: gridFontSize,
+              if (usePageScroll)
+                SizedBox(
+                  height: _gridFrameHeight,
+                  child: _buildDesktopGridZone(
+                    gridFontSize: gridFontSize,
+                  ),
+                )
+              else
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(
+                      height: _gridFrameHeight,
+                      child: _buildDesktopGridZone(
+                        gridFontSize: gridFontSize,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
               const SizedBox(height: 4),
               _buildSaveSaleBar(),
             ],
@@ -1609,22 +1624,16 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           policy: OrderedTraversalPolicy(),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: fitsFixedLayout
-                ? columnChild(expandGrid: true)
-                : SingleChildScrollView(
+            child: usePageScroll
+                ? SingleChildScrollView(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
                         minHeight: constraints.maxHeight,
                       ),
-                      child: columnChild(
-                        expandGrid: false,
-                        gridHeight: math.max(
-                          _gridMinScrollHeight,
-                          constraints.maxHeight - _desktopChromeEstimate,
-                        ),
-                      ),
+                      child: columnChild(),
                     ),
-                  ),
+                  )
+                : columnChild(),
           ),
         );
 

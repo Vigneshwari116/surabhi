@@ -11,6 +11,7 @@ import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/db/schema_migrations.dart';
 import 'package:surabhi/services/summary_update_service.dart';
 
 /// A bill row joined with its local metadata for reads.
@@ -71,6 +72,7 @@ class LocalDb {
   static LocalDb? _instance;
 
   Database? _database;
+  Future<Database>? _openFuture;
 
   LocalDb._();
 
@@ -84,6 +86,7 @@ class LocalDb {
   static Future<void> resetForTesting() async {
     await _instance?._database?.close();
     _instance?._database = null;
+    _instance?._openFuture = null;
     _instance = null;
   }
 
@@ -101,11 +104,18 @@ class LocalDb {
   }
 
   Future<Database> get database async {
+    if (_database != null && _database!.isOpen) {
+      return _database!;
+    }
     if (_database != null && !_database!.isOpen) {
       _database = null;
+      _openFuture = null;
     }
-    _database ??= await _initDb();
-    return _database!;
+    _openFuture ??= _initDb().then((db) {
+      _database = db;
+      return db;
+    });
+    return _openFuture!;
   }
 
   // ---------------------------------------------------------------------------
@@ -937,13 +947,11 @@ class LocalDb {
   }
 
   Future<void> _migrateV2ToV3(Database db) async {
-    final hasDeleted = await _tableHasColumn(db, 'bills', 'deleted');
-    if (hasDeleted) {
-      return;
-    }
-
-    await db.execute(
-      'ALTER TABLE bills ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
+    await addColumnIfMissing(
+      db,
+      'bills',
+      'deleted',
+      'INTEGER NOT NULL DEFAULT 0',
     );
   }
 

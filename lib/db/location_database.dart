@@ -10,6 +10,7 @@ import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/local_db.dart';
+import 'package:surabhi/db/schema_migrations.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
 
@@ -578,13 +579,12 @@ class LocationDatabase {
     int newVersion,
   ) async {
     if (oldVersion < 3) {
-      final columns = await db.rawQuery('PRAGMA table_info(bills)');
-      final hasDeleted = columns.any((column) => column['name'] == 'deleted');
-      if (!hasDeleted) {
-        await db.execute(
-          'ALTER TABLE bills ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
-        );
-      }
+      await addColumnIfMissing(
+        db,
+        'bills',
+        'deleted',
+        'INTEGER NOT NULL DEFAULT 0',
+      );
     }
   }
 
