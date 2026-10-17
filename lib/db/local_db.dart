@@ -300,6 +300,14 @@ class LocalDb {
     return await peekNextBillNoFromBills(location);
   }
 
+  Future<int> countActiveBills() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM bills WHERE deleted = 0',
+    );
+    return Sqflite.firstIntValue(rows) ?? 0;
+  }
+
   /// Next bill number from live rows: MAX(bill_no) + 1 (or 1 when empty).
   Future<int> peekNextBillNoFromBills(String location) async {
     final maxNo = await _maxBillNoForLocation(location);

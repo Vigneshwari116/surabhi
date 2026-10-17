@@ -30,6 +30,7 @@ import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/utils/money_format.dart';
 import 'package:surabhi/utils/qty_format.dart';
+import 'package:surabhi/utils/system_clock.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 class SalesBillScreen extends StatefulWidget {
@@ -48,8 +49,16 @@ class SalesBillScreen extends StatefulWidget {
   @visibleForTesting
   final Future<void> Function()? saveBillOverride;
 
+  /// When set (tests only), skips thermal print after save.
+  @visibleForTesting
+  final Future<void> Function(SaleBill bill, int savedBillNo)?
+      printAfterSaveOverride;
+
   /// When false, bill tab is hidden inside [IndexedStack] — restore focus on return.
   final bool isSectionActive;
+
+  /// How often to re-check the calendar day while the screen is open.
+  final Duration calendarCheckInterval;
 
   const SalesBillScreen({
     super.key,
@@ -58,13 +67,16 @@ class SalesBillScreen extends StatefulWidget {
     this.initialBillNo,
     this.ledgerScreenBuilder,
     this.saveBillOverride,
+    this.printAfterSaveOverride,
+    this.calendarCheckInterval = const Duration(seconds: 30),
   });
 
   @override
   State<SalesBillScreen> createState() => _SalesBillScreenState();
 }
 
-class _SalesBillScreenState extends State<SalesBillScreen> {
+class _SalesBillScreenState extends State<SalesBillScreen>
+    with WidgetsBindingObserver {
   // ============================================================
   // COLORS
   // ============================================================
@@ -151,7 +163,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // BILL DATE
   // ============================================================
 
-  DateTime _billDate = DateTime.now();
+  DateTime _billDate = SystemClock.now();
+  Timer? _calendarDayTimer;
+  DateTime? _todaySalesLoadedDay;
 
   // ============================================================
   // PAYMENT
@@ -253,6 +267,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         } else if (!_billSaved) {
           await _alignDraftBillNoIfTaken();
         }
+        await _onCalendarDayTick();
       }());
     }
     if (widget.isSectionActive && !oldWidget.isSectionActive) {
@@ -265,6 +280,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _calendarDayTimer = Timer.periodic(
+      widget.calendarCheckInterval,
+      (_) => unawaited(_onCalendarDayTick()),
+    );
 
     _selectedLocation = AppConfig.displayLocationName;
     _rateController.text = '0';
@@ -459,6 +479,49 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_onCalendarDayTick());
+    }
+  }
+
+  DateTime _now() => SystemClock.now();
+
+  Future<bool> _syncUnsavedBillDateToToday() async {
+    if (_billSaved) {
+      return false;
+    }
+    final now = _now();
+    if (isSameCalendarDay(_billDate, now)) {
+      return false;
+    }
+    _billDate = now;
+    await _persistSession();
+    return true;
+  }
+
+  Future<void> _onCalendarDayTick() async {
+    if (!mounted) return;
+
+    var changed = false;
+    if (await _syncUnsavedBillDateToToday()) {
+      changed = true;
+    }
+
+    final now = _now();
+    if (_todaySalesPanelVisible &&
+        (_todaySalesLoadedDay == null ||
+            !isSameCalendarDay(_todaySalesLoadedDay!, now))) {
+      await _refreshTodaySales();
+      changed = true;
+    }
+
+    if (changed && mounted) {
+      setState(() {});
+    }
+  }
+
   bool get _isEntryLocked => _busy || _manualPushInProgress;
 
   Future<void> _loadGstRates() async {
@@ -496,7 +559,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     if (session != null && session.location == _selectedLocation) {
       setState(() {
         _billNo = session.billNo;
-        _billDate = session.billDate;
+        final sessionDate = session.billDate;
+        if (!session.billSaved &&
+            !isSameCalendarDay(sessionDate, _now())) {
+          _billDate = _now();
+        } else {
+          _billDate = sessionDate;
+        }
         _paymentMode = session.paymentMode == 'PHONE PEE'
             ? 'UPI'
             : session.paymentMode;
@@ -523,6 +592,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     setState(() {
       _currentBillLocalId = null;
+      if (!_billSaved) {
+        _billDate = _now();
+      }
     });
 
     await _loadBillNumber();
@@ -989,7 +1061,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   void _clearCurrentBill() {
-    _billDate = DateTime.now();
+    _billDate = _now();
 
     _paymentMode = 'UPI';
     _selectedParticular = kSaleGroups.first;
@@ -1029,6 +1101,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     setState(() => _busy = true);
 
     try {
+      if (await _syncUnsavedBillDateToToday() && mounted) {
+        setState(() {});
+      }
+
       final bill = _buildCurrentBill();
       final result = await BillRepository.saveBill(
         bill,
@@ -1240,6 +1316,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Future<void> _printBillAfterSave(SaleBill bill, int savedBillNo) async {
+    if (widget.printAfterSaveOverride != null) {
+      await widget.printAfterSaveOverride!(bill, savedBillNo);
+      if (!mounted) return;
+      _showMessage('Bill $savedBillNo saved');
+      return;
+    }
+
     final savedPrinter =
         await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal) ??
             '';
@@ -1535,7 +1618,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Future<void> _refreshTodaySales() async {
     try {
-      final today = DateTime.now();
+      final today = _now();
+      _todaySalesLoadedDay = DateTime(today.year, today.month, today.day);
       final summary = await AbstractRepository.getSummaryForDateRange(
         location: _selectedLocation,
         fromDate: today,
@@ -1637,7 +1721,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildTodaySalesPanel() {
     final title =
-        'TODAY SALES - ${DateFormat('dd MMM yyyy').format(DateTime.now())}';
+        'TODAY SALES - ${DateFormat('dd MMM yyyy').format(_now())}';
     return Container(
       key: const Key('today_sales_panel'),
       width: _todaySalesFrameWidth,
@@ -2108,6 +2192,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
+                  key: const Key('bill_date_display'),
                   '${_billDate.day.toString().padLeft(2, '0')}/'
                       '${_billDate.month.toString().padLeft(2, '0')}/'
                       '${_billDate.year}',
@@ -3387,6 +3472,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   @override
   void dispose() {
+    _calendarDayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     SyncService.instance.manualPushInProgress
         .removeListener(_onManualPushChanged);
     _persistSession();
