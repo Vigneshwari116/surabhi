@@ -8,7 +8,6 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/local_credentials.dart';
 import 'package:surabhi/db/local_db.dart';
@@ -16,8 +15,6 @@ import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
-import 'package:surabhi/services/sync_service.dart';
-
 class _FakePathProvider extends Fake
     with MockPlatformInterfaceMixin
     implements PathProviderPlatform {
@@ -33,7 +30,7 @@ const _testLocationCode = 'main';
 
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
-  final file = File('${dir.path}/${_testLocationCode}_sales.db');
+  final file = File('${dir.path}/main_sales.db');
   if (await file.exists()) {
     await file.delete();
   }
@@ -62,18 +59,12 @@ void main() {
     await AppConfig.setLocation(_testLocationCode);
     await SessionService.clearBillSession();
     await LocalDb.resetForTesting();
-    await SyncService.resetForTesting();
     await _deleteTestDb();
     await LocalDb.instance.initialize();
     await LocalDb.instance.getNextBillNumber(AppConfig.displayLocationName);
-    SyncService.instance.start(location: AppConfig.displayLocationName);
-    BillRepository.saveBillApiOverride =
-        (bill) async => SalesApiResult.success(bill.billNo);
   });
 
   tearDown(() async {
-    BillRepository.saveBillApiOverride = null;
-    await SyncService.resetForTesting();
     await LocalDb.resetForTesting();
     await _deleteTestDb();
     await AppConfig.clearLocation();
@@ -104,11 +95,25 @@ void main() {
 
   Future<void> tearDownBillScreen(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 11));
   }
 
   final rateField = find.byKey(const Key('bill_rate_field'));
   final qtyField = find.byKey(const Key('bill_qty_field'));
+  final amountField = find.byKey(const Key('bill_amount_field'));
+
+  testWidgets('amount field is skipped by focus traversal', (tester) async {
+    await pumpBillScreen(tester);
+
+    final amountFocus = tester.widget<Focus>(find.ancestor(
+      of: amountField,
+      matching: find.byType(Focus),
+    ).first);
+    expect(amountFocus.skipTraversal, isTrue);
+    expect(amountFocus.canRequestFocus, isFalse);
+
+    await tearDownBillScreen(tester);
+  });
 
   testWidgets('typing pause does not auto-advance rate or add line item',
       (tester) async {
@@ -258,14 +263,64 @@ void main() {
     await tearDownBillScreen(tester);
   });
 
-  testWidgets('invalid rate shows inline error below field', (tester) async {
+  testWidgets('second 777 while save is in progress is ignored', (tester) async {
+    var saveCalls = 0;
+
+    await SessionService.saveBillSession(
+      location: AppConfig.displayLocationName,
+      billNo: 1,
+      billDate: DateTime.now(),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(qty: 1, rate: 50)],
+      billSaved: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SalesBillScreen(
+          saveBillOverride: () async {
+            saveCalls++;
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+          },
+        ),
+      ),
+    );
+
+    for (var i = 0; i < 80; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.byIcon(Icons.close).evaluate().isNotEmpty) {
+        break;
+      }
+    }
+
+    await tester.tap(rateField);
+    await tester.enterText(rateField, '777');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.enterText(rateField, '777');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(saveCalls, 1);
+
+    await tearDownBillScreen(tester);
+  });
+
+  testWidgets('invalid qty on add shows inline error', (tester) async {
     await pumpBillScreen(tester);
 
-    await tester.enterText(rateField, '0');
+    expect(find.text('Rate must be greater than 0'), findsNothing);
+
+    await tester.tap(rateField);
+    await tester.enterText(rateField, '100');
+    await tester.tap(qtyField);
+    await tester.enterText(qtyField, '0');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 
-    expect(find.text('Rate must be greater than 0'), findsOneWidget);
+    expect(find.text('Quantity must be greater than 0'), findsOneWidget);
     await tearDownBillScreen(tester);
   });
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/sales_ledger_screen.dart';
 
@@ -20,6 +20,7 @@ LocalLedgerEntry _sampleLedgerEntry() {
     sgst: 2.5,
     igst: 0,
     grandTotal: 105,
+    pcs: 1,
     syncStatus: 'pending',
   );
 }
@@ -38,6 +39,7 @@ Future<
       sgst: entry.sgst,
       igst: entry.igst,
       grandTotal: entry.grandTotal,
+      totalPcs: entry.pcs,
     ),
   );
 }

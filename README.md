@@ -1,4 +1,4 @@
-# Surabhi Exports
+# Surabhi Export
 
 Offline sales billing app (same flow as RKS sales) for a **single shop location**.
 

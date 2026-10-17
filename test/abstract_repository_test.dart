@@ -100,5 +100,38 @@ void main() {
     );
 
     expect(summary.totalSaleAmount, 100);
+    expect(summary.totalPcs, 1);
+  });
+
+  test('display location Surabhi resolves to main for today summary', () async {
+    final bill = SaleBill(
+      billNo: 2,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 13),
+      paymentMode: 'CARD',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(qty: 1, rate: 200, particular: 'shirt'),
+      ],
+      totalQty: 1,
+      totalAmount: 200,
+      totalCgst: 5,
+      totalSgst: 5,
+      totalIgst: 0,
+      grandTotal: 210,
+    );
+
+    await LocalDb.instance.insertPendingBill(bill);
+
+    final summary = await AbstractRepository.getSummaryForDateRange(
+      location: 'Surabhi',
+      fromDate: DateTime(2026, 10, 13),
+      toDate: DateTime(2026, 10, 13),
+    );
+
+    expect(summary.totalSaleAmount, 200);
+    expect(summary.totalGst, 10);
+    expect(summary.totalPcs, 1);
   });
 }

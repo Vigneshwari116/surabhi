@@ -6,6 +6,7 @@ import 'package:surabhi/config/local_credentials.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/utils/bill_gst_totals.dart';
 import 'package:surabhi/screen/number%20to%20words.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
@@ -14,7 +15,6 @@ import 'package:surabhi/widgets/compact_layout.dart';
 class LedgerBillDetailScreen extends StatefulWidget {
   final SaleBill bill;
   final String localId;
-  final String? syncStatus;
   final bool readOnly;
   final bool adminFullEdit;
 
@@ -22,7 +22,6 @@ class LedgerBillDetailScreen extends StatefulWidget {
     super.key,
     required this.bill,
     required this.localId,
-    this.syncStatus,
     this.readOnly = false,
     this.adminFullEdit = false,
   });
@@ -84,23 +83,19 @@ class _LedgerBillDetailScreenState extends State<LedgerBillDetailScreen> {
 
   String _formatDate(DateTime date) => DateFormat('dd-MMM-yy').format(date);
 
-  double get _totalQty =>
-      _items.fold(0.0, (sum, item) => sum + item.qty);
+  BillGstTotals get _billGstTotals => computeBillGstTotalsFromItems(_items);
 
-  double get _totalAmount =>
-      _items.fold(0.0, (sum, item) => sum + item.amount);
+  double get _totalQty => _billGstTotals.totalQty;
 
-  double get _totalCgst =>
-      _items.fold(0.0, (sum, item) => sum + item.cgst);
+  double get _totalAmount => _billGstTotals.totalAmount;
 
-  double get _totalSgst =>
-      _items.fold(0.0, (sum, item) => sum + item.sgst);
+  double get _totalCgst => _billGstTotals.totalCgst;
 
-  double get _totalIgst =>
-      _items.fold(0.0, (sum, item) => sum + item.igst);
+  double get _totalSgst => _billGstTotals.totalSgst;
 
-  double get _grandTotal =>
-      _items.fold(0.0, (sum, item) => sum + item.grossAmt);
+  double get _totalIgst => _billGstTotals.totalIgst;
+
+  double get _grandTotal => _billGstTotals.grandTotal;
 
   void _onMobileDoubleTap() {
     if (widget.adminFullEdit ||
@@ -301,38 +296,11 @@ class _LedgerBillDetailScreenState extends State<LedgerBillDetailScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Text(
-                'Location: ${_bill.location}',
-                style: const TextStyle(fontSize: 10),
-              ),
-              if (widget.syncStatus != null) ...[
-                const Spacer(),
-                _syncBadge(widget.syncStatus!),
-              ],
-            ],
+          Text(
+            'Location: ${_bill.location}',
+            style: const TextStyle(fontSize: 10),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _syncBadge(String status) {
-    final isPending = status == 'pending';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isPending ? AppColors.warningBg : AppColors.successBg,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        isPending ? 'Pending sync' : 'Synced',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: isPending ? AppColors.warningFg : AppColors.success,
-        ),
       ),
     );
   }
@@ -617,7 +585,7 @@ class _LedgerBillDetailScreenState extends State<LedgerBillDetailScreen> {
       child: const Row(
         children: [
           _HeaderCell('S.no', 1),
-          _HeaderCell('Particular', 1),
+          _HeaderCell('Group', 1),
           _HeaderCell('Qty', 1),
           _HeaderCell('RATE', 1),
           _HeaderCell('AMOUNT', 1),

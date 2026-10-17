@@ -43,7 +43,7 @@ void main() {
     final bytes = EscPosReceiptService.buildReceiptBytesFromText(text);
     final payload = String.fromCharCodes(bytes);
 
-    expect(payload, contains('SURABHI EXPORTS'));
+    expect(payload, contains('SURABHI EXPORT'));
     expect(payload, contains('THARGUPET'));
     expect(payload, contains('BILL NO:17367'));
     expect(payload, contains('GRAND TOTAL'));
@@ -55,6 +55,20 @@ void main() {
 
     expect(_containsEscPosCommand(bytes, 0x4C), isFalse); // GS L left margin
     expect(_containsEscPosCommand(bytes, 0x57), isFalse); // GS W print width
+  });
+
+  test('esc pos uses hardware center align for GSTIN and thank-you', () {
+    final bytes = EscPosReceiptService.buildReceiptBytes(_sampleBill());
+    expect(
+      _hasCenterAlignBefore(bytes, 'GSTIN:'),
+      isTrue,
+      reason: 'GSTIN should be printed with ESC a 1 center align',
+    );
+    expect(
+      _hasCenterAlignBefore(bytes, 'THANK YOU VISIT AGAIN'),
+      isTrue,
+      reason: 'Thank-you footer should be center aligned on thermal',
+    );
   });
 
   test('esc pos lines are padded to exactly 48 characters', () {
@@ -78,6 +92,32 @@ void main() {
 
     expect(xRun, 48);
   });
+}
+
+bool _hasCenterAlignBefore(List<int> bytes, String text) {
+  final marker = text.codeUnits;
+  for (var i = 0; i <= bytes.length - marker.length; i++) {
+    var matches = true;
+    for (var j = 0; j < marker.length; j++) {
+      if (bytes[i + j] != marker[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches) {
+      continue;
+    }
+    final searchStart = (i - 12).clamp(0, i);
+    for (var k = searchStart; k < i; k++) {
+      if (k + 2 < bytes.length &&
+          bytes[k] == 0x1B &&
+          bytes[k + 1] == 0x61 &&
+          bytes[k + 2] == 0x01) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool _containsEscPosCommand(List<int> bytes, int commandByte) {

@@ -7,23 +7,64 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/services/esc_pos_receipt_service.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
+import 'package:surabhi/services/print_log_service.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
-import 'package:surabhi/services/thermal_raw_printer.dart';
+import 'package:surabhi/utils/thermal_printer_filter.dart';
+
+enum PrinterPickSource {
+  savedExact,
+  savedFuzzy,
+  osDefault,
+  firstPhysical,
+}
+
+class ResolvedPrinter {
+  final Printer printer;
+  final PrinterPickSource source;
+
+  const ResolvedPrinter({
+    required this.printer,
+    required this.source,
+  });
+
+  bool get shouldPersist =>
+      source == PrinterPickSource.osDefault ||
+      source == PrinterPickSource.firstPhysical;
+}
 
 class BillPrintService {
-  /// TVS RP3200: 80mm roll; 70mm content area keeps left/right data visible.
-  static const double thermalPageWidthMm = 80.0;
-  static const double thermalPrintableWidthMm = 70.0;
-  static const double _thermalMarginMm =
-      (thermalPageWidthMm - thermalPrintableWidthMm) / 2;
+  /// Thermal PDF tuning (3-inch / RP3200 roll) — adjust here only.
+  static const double thermalPdfPageWidthMm = ReceiptLayout.pageWidthMm;
+  static const double thermalPdfMarginRightMm = ReceiptLayout.marginRightMm;
 
-  /// RP3200 Font A (12×24 dots): 48 columns, 1.50×3.00mm per character.
-  static const double thermalFontSizePt = 8.0;
-  static const double thermalCharWidthMm = 1.50;
+  static const double thermalPdfMarginLeftMm = ReceiptLayout.marginLeftMm;
+  static const double thermalPdfMarginTopMm = 2.5;
+  static const double thermalPdfMarginBottomMm = 4.0;
+  static const double thermalPrintableWidthMm = ReceiptLayout.contentWidthMm;
+
+  static double thermalFontSizePt() => ReceiptLayout.bodyFontSizePt();
   static const double thermalLineSpacingMm = 4.25;
+  static const double thermalHeaderLineSpacingMm = 6.0;
+  static const double thermalGrandTotalLineSpacingMm = 5.25;
 
+  @visibleForTesting
+  static Future<List<Printer>> Function()? listPrintersOverride;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required Printer printer,
+    required Future<Uint8List> Function(PdfPageFormat format) onLayout,
+    required String name,
+    required PdfPageFormat format,
+  })? directPrintOverride;
+
+  @visibleForTesting
+  static int desktopPdfSaveCount = 0;
+
+  /// For tests / tooling only — not used by SAVE SALE print flow.
   static Future<String> saveReceiptToDesktop(SaleBill bill) async {
     final text = ReceiptService.buildReceiptText(bill);
     final saveDir = await _receiptSaveDirectory();
@@ -34,14 +75,83 @@ class BillPrintService {
     return file.path;
   }
 
+  /// For tests / tooling only — not used by SAVE SALE print flow.
   static Future<String> saveReceiptPdfToDesktop(SaleBill bill) async {
+    desktopPdfSaveCount++;
     final bytes = await _buildPdfBytes(bill, type: PrinterType.thermal);
     final saveDir = await _receiptSaveDirectory();
     final datePart = DateFormat('dd-MM-yyyy').format(bill.billDate);
     final fileName = 'Bill_${bill.billNo}_$datePart.pdf';
     final file = File('$saveDir${Platform.pathSeparator}$fileName');
-    await file.writeAsBytes(bytes);
+    await file.writeAsBytes(bytes, flush: true);
     return file.path;
+  }
+
+  /// Resolves a physical printer: saved name, fuzzy match, OS default, first physical.
+  @visibleForTesting
+  static ResolvedPrinter? resolveTargetPrinter({
+    required List<Printer> printers,
+    String savedPrinterName = '',
+  }) {
+    final physical = ThermalPrinterFilter.physicalPrinters(printers);
+    if (physical.isEmpty) {
+      return null;
+    }
+
+    String clean(String value) =>
+        value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    var available =
+        physical.where((printer) => printer.isAvailable != false).toList();
+    if (available.isEmpty) {
+      available = physical;
+    }
+
+    final saved = savedPrinterName.trim();
+    if (saved.isNotEmpty) {
+      for (final printer in available) {
+        if (printer.name == saved || printer.url == saved) {
+          return ResolvedPrinter(
+            printer: printer,
+            source: PrinterPickSource.savedExact,
+          );
+        }
+      }
+
+      final savedClean = clean(saved);
+      if (savedClean.isNotEmpty) {
+        for (final printer in available) {
+          final nameClean = clean(printer.name);
+          final urlClean = clean(printer.url);
+          if (nameClean == savedClean ||
+              urlClean == savedClean ||
+              nameClean.contains(savedClean) ||
+              savedClean.contains(nameClean) ||
+              (urlClean.isNotEmpty &&
+                  (urlClean.contains(savedClean) ||
+                      savedClean.contains(urlClean)))) {
+            return ResolvedPrinter(
+              printer: printer,
+              source: PrinterPickSource.savedFuzzy,
+            );
+          }
+        }
+      }
+    }
+
+    for (final printer in available) {
+      if (printer.isDefault) {
+        return ResolvedPrinter(
+          printer: printer,
+          source: PrinterPickSource.osDefault,
+        );
+      }
+    }
+
+    return ResolvedPrinter(
+      printer: available.first,
+      source: PrinterPickSource.firstPhysical,
+    );
   }
 
   static Future<bool> printReceipt(
@@ -57,43 +167,74 @@ class BillPrintService {
       );
     }
 
-    final printers = await Printing.listPrinters();
-    Printer? printer;
+    await PrintLogService.append(
+      'print start billNo=${bill.billNo} savedPrinter=${printerName.isEmpty ? '(none)' : printerName}',
+    );
 
-    for (final candidate in printers) {
-      if (candidate.name == printerName || candidate.url == printerName) {
-        printer = candidate;
-        break;
-      }
-    }
-
-    if (printer == null) {
-      throw Exception('Printer "$printerName" not found');
-    }
-
-    if (type == PrinterType.thermal && !kIsWeb && Platform.isWindows) {
-      final escPosBytes = EscPosReceiptService.buildReceiptBytes(bill);
-      return printRawEscPos(
-        printerName: printerName,
-        data: escPosBytes,
+    try {
+      final printers = listPrintersOverride != null
+          ? await listPrintersOverride!()
+          : await Printing.listPrinters();
+      final resolved = resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: printerName,
       );
+
+      if (resolved == null) {
+        await PrintLogService.append('printer resolve: none (no physical printer)');
+        throw const BillPrintException(
+          'Printer not found. Choose the thermal printer in Printer settings',
+        );
+      }
+
+      await PrintLogService.append(
+        'printer resolve: name=${resolved.printer.name} source=${resolved.source.name}',
+      );
+
+      if (resolved.shouldPersist) {
+        await PrinterSettingsService.setDefaultPrinter(
+          PrinterType.thermal,
+          resolved.printer.name,
+        );
+        await PrintLogService.append(
+          'printer persisted to settings: ${resolved.printer.name}',
+        );
+      }
+
+      final layout = _computePageLayout(
+        ReceiptService.buildReceiptLines(bill),
+        type: type,
+      );
+
+      final printed = directPrintOverride != null
+          ? await directPrintOverride!(
+              printer: resolved.printer,
+              onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+              name: 'Bill_${bill.billNo}',
+              format: layout.pageFormat,
+            )
+          : await Printing.directPrintPdf(
+              printer: resolved.printer,
+              onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+              name: 'Bill_${bill.billNo}',
+              format: layout.pageFormat,
+              dynamicLayout: false,
+              usePrinterSettings: false,
+            );
+
+      if (!printed) {
+        throw const BillPrintException('Direct thermal print returned false');
+      }
+
+      await PrintLogService.append('print end billNo=${bill.billNo} ok');
+      return true;
+    } catch (e, stackTrace) {
+      await PrintLogService.append('print error: $e\n$stackTrace');
+      if (e is BillPrintException) {
+        rethrow;
+      }
+      throw BillPrintException('$e');
     }
-
-    final layout = _computePageLayout(
-      _normalizedReceiptText(ReceiptService.buildReceiptText(bill)),
-      type: type,
-    );
-
-    final printed = await Printing.directPrintPdf(
-      printer: printer,
-      onLayout: (_) async => _buildPdfBytesFromLayout(layout),
-      name: 'Bill_${bill.billNo}',
-      format: layout.pageFormat,
-      dynamicLayout: false,
-      usePrinterSettings: false,
-    );
-
-    return printed;
   }
 
   @visibleForTesting
@@ -101,9 +242,21 @@ class BillPrintService {
     SaleBill bill, {
     PrinterType type = PrinterType.thermal,
   }) async {
-    final text = _normalizedReceiptText(ReceiptService.buildReceiptText(bill));
-    final layout = _computePageLayout(text, type: type);
+    final layout = _computePageLayout(
+      ReceiptService.buildReceiptLines(bill),
+      type: type,
+    );
     return _buildPdfBytesFromLayout(layout);
+  }
+
+  @visibleForTesting
+  static Future<Uint8List> buildDesktopPdfBytes(SaleBill bill) {
+    return buildPdfBytes(bill);
+  }
+
+  @visibleForTesting
+  static Future<Uint8List> buildThermalPdfBytes(SaleBill bill) {
+    return buildPdfBytes(bill);
   }
 
   @visibleForTesting
@@ -111,58 +264,114 @@ class BillPrintService {
     SaleBill bill, {
     PrinterType type = PrinterType.thermal,
   }) {
-    final text = _normalizedReceiptText(ReceiptService.buildReceiptText(bill));
-    return _computePageLayout(text, type: type).pageFormat;
+    return _computePageLayout(
+      ReceiptService.buildReceiptLines(bill),
+      type: type,
+    ).pageFormat;
   }
 
   static _ReceiptPdfLayout _computePageLayout(
-    String text, {
+    List<String> lines, {
     required PrinterType type,
   }) {
-    final lines = text.split('\n');
     final fontSize =
-        type == PrinterType.thermal ? thermalFontSizePt : 7.0;
+        type == PrinterType.thermal ? thermalFontSizePt() : 7.0;
     final lineHeightMm =
         type == PrinterType.thermal ? thermalLineSpacingMm : 4.25;
     const lineHeightFactor = 1.0;
-    const verticalMarginMm = 2.0;
-    const bottomBufferMm = 4.0;
 
-    final pageWidthMm = thermalPageWidthMm;
-    final marginLeftMm = _thermalMarginMm;
-    final marginRightMm = _thermalMarginMm;
-    final printableWidthMm = thermalPrintableWidthMm;
+    if (type == PrinterType.thermal) {
+      final contentHeightMm = lines.isEmpty
+          ? thermalPdfMarginTopMm + thermalPdfMarginBottomMm
+          : _sumLineHeights(lines, lineHeightMm) +
+              thermalPdfMarginTopMm +
+              thermalPdfMarginBottomMm;
+
+      final pageFormat = PdfPageFormat(
+        thermalPdfPageWidthMm * PdfPageFormat.mm,
+        contentHeightMm * PdfPageFormat.mm,
+        marginLeft: thermalPdfMarginLeftMm * PdfPageFormat.mm,
+        marginRight: thermalPdfMarginRightMm * PdfPageFormat.mm,
+        marginTop: thermalPdfMarginTopMm * PdfPageFormat.mm,
+        marginBottom: thermalPdfMarginBottomMm * PdfPageFormat.mm,
+      );
+
+      return _ReceiptPdfLayout(
+        lines: lines,
+        pageFormat: pageFormat,
+        printableWidthMm: thermalPrintableWidthMm,
+        fontSize: fontSize,
+        lineHeightMm: lineHeightMm,
+        lineHeightFactor: lineHeightFactor,
+      );
+    }
+
+    const legacyPageWidthMm = 80.0;
+    const legacyPrintableMm = 70.0;
+    const legacyMarginMm = (legacyPageWidthMm - legacyPrintableMm) / 2;
+    const legacyVerticalMarginMm = 2.0;
+    const legacyBottomBufferMm = 4.0;
 
     final contentHeightMm = lines.isEmpty
-        ? verticalMarginMm * 2 + bottomBufferMm
+        ? legacyVerticalMarginMm * 2 + legacyBottomBufferMm
         : lines.length * lineHeightMm +
-            verticalMarginMm * 2 +
-            bottomBufferMm;
+            legacyVerticalMarginMm * 2 +
+            legacyBottomBufferMm;
 
     final pageFormat = PdfPageFormat(
-      pageWidthMm * PdfPageFormat.mm,
+      legacyPageWidthMm * PdfPageFormat.mm,
       contentHeightMm * PdfPageFormat.mm,
-      marginLeft: marginLeftMm * PdfPageFormat.mm,
-      marginRight: marginRightMm * PdfPageFormat.mm,
-      marginTop: verticalMarginMm * PdfPageFormat.mm,
-      marginBottom: verticalMarginMm * PdfPageFormat.mm,
+      marginLeft: legacyMarginMm * PdfPageFormat.mm,
+      marginRight: legacyMarginMm * PdfPageFormat.mm,
+      marginTop: legacyVerticalMarginMm * PdfPageFormat.mm,
+      marginBottom: legacyVerticalMarginMm * PdfPageFormat.mm,
     );
 
     return _ReceiptPdfLayout(
       lines: lines,
       pageFormat: pageFormat,
-      printableWidthMm: printableWidthMm,
+      printableWidthMm: legacyPrintableMm,
       fontSize: fontSize,
       lineHeightMm: lineHeightMm,
       lineHeightFactor: lineHeightFactor,
     );
   }
 
+  static double _sumLineHeights(List<String> lines, double baseLineHeightMm) {
+    var total = 0.0;
+    for (final line in lines) {
+      total += _lineHeightMmFor(line, baseLineHeightMm);
+    }
+    return total;
+  }
+
+  static double _lineHeightMmFor(String line, double baseLineHeightMm) {
+    final trimmed = line.trim();
+    if (trimmed == ReceiptService.businessName) {
+      return thermalHeaderLineSpacingMm;
+    }
+    if (trimmed.startsWith('GRAND TOTAL')) {
+      return thermalGrandTotalLineSpacingMm;
+    }
+    return baseLineHeightMm;
+  }
+
+  static String? _grandTotalAmount(String line) {
+    if (!line.trimLeft().startsWith('GRAND TOTAL')) {
+      return null;
+    }
+    final trimmed = line.trimRight();
+    if (trimmed.length < ReceiptLayout.amountWidth) {
+      return null;
+    }
+    return trimmed.substring(trimmed.length - ReceiptLayout.amountWidth).trim();
+  }
+
   static Future<Uint8List> _buildPdfBytesFromLayout(
     _ReceiptPdfLayout layout,
   ) async {
     final doc = pw.Document();
-    final style = pw.TextStyle(
+    final baseStyle = pw.TextStyle(
       font: pw.Font.courierBold(),
       fontSize: layout.fontSize,
       lineSpacing: 0,
@@ -180,9 +389,9 @@ class BillPrintService {
             for (final line in layout.lines)
               _thermalLineWidget(
                 line: line,
-                style: style,
+                baseStyle: baseStyle,
                 printableWidthMm: layout.printableWidthMm,
-                lineHeightMm: layout.lineHeightMm,
+                lineHeightMm: _lineHeightMmFor(line, layout.lineHeightMm),
               ),
           ],
         ),
@@ -194,32 +403,70 @@ class BillPrintService {
 
   static pw.Widget _thermalLineWidget({
     required String line,
-    required pw.TextStyle style,
+    required pw.TextStyle baseStyle,
     required double printableWidthMm,
     required double lineHeightMm,
   }) {
-    final text = line.isEmpty ? ' ' : line;
-    pw.Widget receiptText() => pw.Text(
-          text,
-          style: style,
-          maxLines: 1,
-          softWrap: false,
-        );
+    final trimmed = line.trim();
+    final boxWidth = printableWidthMm * PdfPageFormat.mm;
+    final boxHeight = lineHeightMm * PdfPageFormat.mm;
 
-    return pw.SizedBox(
-      width: printableWidthMm * PdfPageFormat.mm,
-      height: lineHeightMm * PdfPageFormat.mm,
-      child: pw.FittedBox(
-        fit: pw.BoxFit.scaleDown,
-        alignment: pw.Alignment.centerLeft,
-        child: pw.Stack(
+    if (trimmed == ReceiptService.businessName) {
+      final fontSize =
+          ReceiptLayout.shopNameFontSizePt(ReceiptService.businessName);
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Center(
+          child: pw.Text(
+            trimmed,
+            style: baseStyle.copyWith(fontSize: fontSize),
+            maxLines: 1,
+            softWrap: false,
+            overflow: pw.TextOverflow.clip,
+          ),
+        ),
+      );
+    }
+
+    final grandTotalAmount = _grandTotalAmount(line);
+    if (grandTotalAmount != null) {
+      final fonts = ReceiptLayout.grandTotalFontSizes(grandTotalAmount);
+      return pw.SizedBox(
+        width: boxWidth,
+        height: boxHeight,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            receiptText(),
-            pw.Transform.translate(
-              offset: const PdfPoint(0.4, 0),
-              child: receiptText(),
+            pw.Text(
+              'GRAND TOTAL',
+              style: baseStyle.copyWith(fontSize: fonts.labelPt),
+            ),
+            pw.Text(
+              grandTotalAmount,
+              style: baseStyle.copyWith(fontSize: fonts.amountPt),
             ),
           ],
+        ),
+      );
+    }
+
+    final thankYou = trimmed.contains('THANK YOU VISIT AGAIN');
+    final text = thankYou ? trimmed : (line.isEmpty ? ' ' : line);
+
+    return pw.SizedBox(
+      width: boxWidth,
+      height: boxHeight,
+      child: pw.Align(
+        alignment:
+            thankYou ? pw.Alignment.center : pw.Alignment.centerLeft,
+        child: pw.Text(
+          text,
+          style: baseStyle,
+          maxLines: 1,
+          softWrap: false,
+          overflow: pw.TextOverflow.clip,
         ),
       ),
     );
@@ -229,18 +476,11 @@ class BillPrintService {
     SaleBill bill, {
     required PrinterType type,
   }) async {
-    final text = _normalizedReceiptText(ReceiptService.buildReceiptText(bill));
-    final layout = _computePageLayout(text, type: type);
+    final layout = _computePageLayout(
+      ReceiptService.buildReceiptLines(bill),
+      type: type,
+    );
     return _buildPdfBytesFromLayout(layout);
-  }
-
-  static String _normalizedReceiptText(String text) {
-    return text
-        .replaceAll('\r\n', '\n')
-        .split('\n')
-        .map((line) => line.replaceAll('\r', ''))
-        .join('\n')
-        .trimRight();
   }
 
   static Future<String> _receiptSaveDirectory() async {

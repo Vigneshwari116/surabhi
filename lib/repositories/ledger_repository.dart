@@ -1,13 +1,10 @@
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
-import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/local_db.dart' as db;
-import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 import 'package:surabhi/services/summary_update_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 
 class LocalLedgerEntry {
   final String localId;
@@ -22,7 +19,9 @@ class LocalLedgerEntry {
   final double sgst;
   final double igst;
   final double grandTotal;
+  final double pcs;
   final String syncStatus;
+  final String groupSummary;
 
   LocalLedgerEntry({
     required this.localId,
@@ -37,7 +36,9 @@ class LocalLedgerEntry {
     required this.sgst,
     required this.igst,
     required this.grandTotal,
+    required this.pcs,
     required this.syncStatus,
+    this.groupSummary = '',
   });
 }
 
@@ -49,11 +50,16 @@ class LedgerRepository {
     String? to,
   }) async {
     try {
-      final locationCode = locationCodeFromDisplayName(location);
-      await LocationSeedService.ensureLocationSeeded(locationCode);
-      await LocationBillDetailSeedService.ensureLocationSeeded(locationCode);
-      final rows = await LocationDatabase.getLedgerEntries(
-        location: location,
+      if (AppConfig.isLocationSet) {
+        await db.LocalDb.instance.initialize();
+        await LocationSeedService.ensureLocationSeeded(AppConfig.locationCode);
+        await LocationBillDetailSeedService.ensureLocationSeeded(
+          AppConfig.locationCode,
+        );
+      }
+
+      final rows = await db.LocalDb.instance.getLedgerEntries(
+        location,
         from: from,
         to: to,
       );
@@ -73,7 +79,9 @@ class LedgerRepository {
               sgst: row.totalSgst,
               igst: row.totalIgst,
               grandTotal: row.grandTotal,
+              pcs: row.totalQty,
               syncStatus: row.syncStatus,
+              groupSummary: row.groupSummary,
             ),
           )
           .toList(growable: false);
@@ -91,6 +99,7 @@ class LedgerRepository {
           sgst: 0,
           igst: 0,
           grandTotal: 0,
+          totalPcs: 0,
         ),
       );
     }
@@ -100,16 +109,16 @@ class LedgerRepository {
     required String location,
     required String localId,
   }) async {
-    final locationCode = locationCodeFromDisplayName(location);
-
-    if (AppConfig.isLocationSet && AppConfig.locationCode == locationCode) {
-      return db.LocalDb.instance.getBillByLocalId(localId);
+    try {
+      await db.LocalDb.instance.initialize();
+      final fromActiveDb = await db.LocalDb.instance.getBillByLocalId(localId);
+      if (fromActiveDb != null) {
+        return fromActiveDb;
+      }
+    } catch (_) {
+      // Best-effort read.
     }
-
-    return LocationDatabase.getBillByLocalId(
-      locationCode: locationCode,
-      localId: localId,
-    );
+    return null;
   }
 
   static Future<void> softDeleteBill(String localId) async {
@@ -120,16 +129,13 @@ class LedgerRepository {
     }
   }
 
-  static Future<void> refreshFromServer({required String location}) async {
-    await SyncService.instance.pullAdminUpdates(location);
-  }
-
   static LedgerSummary _buildSummary(List<LocalLedgerEntry> entries) {
     var total = 0.0;
     var cgst = 0.0;
     var sgst = 0.0;
     var igst = 0.0;
     var grandTotal = 0.0;
+    var totalPcs = 0.0;
 
     for (var entry in entries) {
       total += entry.total;
@@ -137,6 +143,7 @@ class LedgerRepository {
       sgst += entry.sgst;
       igst += entry.igst;
       grandTotal += entry.grandTotal;
+      totalPcs += entry.pcs;
     }
 
     return LedgerSummary(
@@ -145,6 +152,7 @@ class LedgerRepository {
       sgst: sgst,
       igst: igst,
       grandTotal: grandTotal,
+      totalPcs: totalPcs,
     );
   }
 }

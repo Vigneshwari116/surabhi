@@ -14,6 +14,7 @@ class SummaryUpdateService {
         location: previous.location,
         billDate: previous.billDate,
         delta: -previous.grandTotal,
+        pcsDelta: -previous.totalQty,
       );
     }
 
@@ -21,6 +22,7 @@ class SummaryUpdateService {
       location: current.location,
       billDate: current.billDate,
       delta: current.grandTotal,
+      pcsDelta: current.totalQty,
     );
   }
 
@@ -30,6 +32,7 @@ class SummaryUpdateService {
       location: bill.location,
       billDate: bill.billDate,
       delta: -bill.grandTotal,
+      pcsDelta: -bill.totalQty,
     );
   }
 
@@ -42,6 +45,7 @@ class SummaryUpdateService {
         location: previous.location,
         billDate: previous.billDate,
         delta: -previous.grandTotal,
+        pcsDelta: -previous.totalQty,
       );
     }
 
@@ -49,6 +53,7 @@ class SummaryUpdateService {
       location: current.location,
       billDate: current.billDate,
       delta: current.grandTotal,
+      pcsDelta: current.totalQty,
     );
   }
 
@@ -59,6 +64,7 @@ class SummaryUpdateService {
         location: bill.location,
         billDate: bill.billDate,
         delta: bill.grandTotal,
+        pcsDelta: bill.totalQty,
       );
     }
   }

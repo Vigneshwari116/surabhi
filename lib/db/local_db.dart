@@ -8,8 +8,10 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:surabhi/config/app_config.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/db/schema_migrations.dart';
 import 'package:surabhi/services/summary_update_service.dart';
 
 /// A bill row joined with its local metadata for reads.
@@ -44,6 +46,7 @@ class LocalLedgerEntry {
   final double grandTotal;
   final String syncStatus;
   final String updatedAt;
+  final String groupSummary;
 
   const LocalLedgerEntry({
     required this.localId,
@@ -61,6 +64,7 @@ class LocalLedgerEntry {
     required this.grandTotal,
     required this.syncStatus,
     required this.updatedAt,
+    this.groupSummary = '',
   });
 }
 
@@ -68,6 +72,7 @@ class LocalDb {
   static LocalDb? _instance;
 
   Database? _database;
+  Future<Database>? _openFuture;
 
   LocalDb._();
 
@@ -81,6 +86,7 @@ class LocalDb {
   static Future<void> resetForTesting() async {
     await _instance?._database?.close();
     _instance?._database = null;
+    _instance?._openFuture = null;
     _instance = null;
   }
 
@@ -98,11 +104,18 @@ class LocalDb {
   }
 
   Future<Database> get database async {
+    if (_database != null && _database!.isOpen) {
+      return _database!;
+    }
     if (_database != null && !_database!.isOpen) {
       _database = null;
+      _openFuture = null;
     }
-    _database ??= await _initDb();
-    return _database!;
+    _openFuture ??= _initDb().then((db) {
+      _database = db;
+      return db;
+    });
+    return _openFuture!;
   }
 
   // ---------------------------------------------------------------------------
@@ -249,7 +262,7 @@ class LocalDb {
       'bills',
       where: whereParts.join(' AND '),
       whereArgs: whereArgs,
-      orderBy: 'bill_no DESC',
+      orderBy: 'bill_date ASC, bill_no ASC',
     );
 
     return rows
@@ -271,26 +284,60 @@ class LocalDb {
         .toList(growable: false);
   }
 
+  static String groupSummaryFromItemsJson(String? itemsJson) {
+    final items = parseBillItems(itemsJson ?? '[]');
+    final seen = <String>{};
+    final names = <String>[];
+    for (final item in items) {
+      final name = item.particular.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      final key = name.toLowerCase();
+      if (seen.add(key)) {
+        names.add(name.toUpperCase());
+      }
+    }
+    return names.join(', ');
+  }
+
   // ---------------------------------------------------------------------------
   // Per-location counters / sync metadata (Phase 1 schema)
   // ---------------------------------------------------------------------------
 
   Future<int> getNextBillNumber(String location) async {
-    await _ensureLocationMeta(location);
-    final db = await database;
-    final rows = await db.query(
-      'location_meta',
-      columns: ['next_bill_no'],
-      where: 'location = ?',
-      whereArgs: [location],
-      limit: 1,
-    );
+    await refreshNextBillNoFromBills(location);
+    return await peekNextBillNoFromBills(location);
+  }
 
-    if (rows.isEmpty) {
+  Future<int> countActiveBills() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM bills WHERE deleted = 0',
+    );
+    return Sqflite.firstIntValue(rows) ?? 0;
+  }
+
+  /// Next bill number from live rows: MAX(bill_no) + 1 (or 1 when empty).
+  Future<int> peekNextBillNoFromBills(String location) async {
+    final maxNo = await _maxBillNoForLocation(location);
+    if (maxNo == null) {
       return 1;
     }
+    return maxNo + 1;
+  }
 
-    return (rows.first['next_bill_no'] as num).toInt();
+  /// First bill number >= [startingAt] not present for [location].
+  Future<int> findNextFreeBillNo(
+    String location, {
+    int startingAt = 1,
+  }) async {
+    var candidate = startingAt;
+    while (
+        await getBillByNumber(location: location, billNo: candidate) != null) {
+      candidate++;
+    }
+    return candidate;
   }
 
   Future<DateTime?> getLastPullAt(String location) async {
@@ -369,6 +416,14 @@ class LocalDb {
           limit: 1,
         );
 
+        if (existingRows.isNotEmpty &&
+            _shouldSkipPulledBillResurrection(
+              existingRow: existingRows.first,
+              pulled: bill,
+            )) {
+          continue;
+        }
+
         SaleBill? previous;
         if (existingRows.isNotEmpty) {
           previous = _rowToStoredBill(existingRows.first)?.bill;
@@ -418,6 +473,29 @@ class LocalDb {
     }
 
     return applied;
+  }
+
+  /// Prevents server pulls from undoing a local soft-delete (tombstone).
+  @visibleForTesting
+  static bool shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    return _shouldSkipPulledBillResurrection(
+      existingRow: existingRow,
+      pulled: pulled,
+    );
+  }
+
+  static bool _shouldSkipPulledBillResurrection({
+    required Map<String, Object?> existingRow,
+    required SaleBill pulled,
+  }) {
+    if (pulled.deleted) {
+      return false;
+    }
+    final locallyDeleted = (existingRow['deleted'] as int? ?? 0) == 1;
+    return locallyDeleted;
   }
 
   /// Soft-deletes a bill (row kept for audit; hidden from ledger).
@@ -474,6 +552,29 @@ class LocalDb {
     );
 
     if (existingId != null) {
+      final freeNo = await findNextFreeBillNo(
+        bill.location,
+        startingAt: bill.billNo,
+      );
+      if (freeNo != bill.billNo) {
+        final reassigned = SaleBill(
+          billNo: freeNo,
+          location: bill.location,
+          billDate: bill.billDate,
+          paymentMode: bill.paymentMode,
+          customerName: bill.customerName,
+          mobile: bill.mobile,
+          items: bill.items,
+          totalQty: bill.totalQty,
+          totalAmount: bill.totalAmount,
+          totalCgst: bill.totalCgst,
+          totalSgst: bill.totalSgst,
+          totalIgst: bill.totalIgst,
+          grandTotal: bill.grandTotal,
+          deleted: bill.deleted,
+        );
+        return insertBill(reassigned, syncStatus: syncStatus);
+      }
       await updateSavedBill(existingId, bill, syncStatus: syncStatus);
       return existingId;
     }
@@ -725,8 +826,7 @@ class LocalDb {
   // ---------------------------------------------------------------------------
 
   Future<Database> _initDb() async {
-    final supportDir = await getApplicationSupportDirectory();
-    final path = join(supportDir.path, '${AppConfig.locationCode}_sales.db');
+    final path = await SalesDatabase.salesDbPath();
 
     return openDatabase(
       path,
@@ -855,13 +955,11 @@ class LocalDb {
   }
 
   Future<void> _migrateV2ToV3(Database db) async {
-    final hasDeleted = await _tableHasColumn(db, 'bills', 'deleted');
-    if (hasDeleted) {
-      return;
-    }
-
-    await db.execute(
-      'ALTER TABLE bills ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
+    await addColumnIfMissing(
+      db,
+      'bills',
+      'deleted',
+      'INTEGER NOT NULL DEFAULT 0',
     );
   }
 
@@ -992,49 +1090,53 @@ class LocalDb {
 
   Future<void> _ensureLocationMeta(String location) async {
     final db = await database;
-    final rows = await db.query(
-      'location_meta',
-      where: 'location = ?',
-      whereArgs: [location],
-      limit: 1,
+    await db.rawInsert(
+      'INSERT OR IGNORE INTO location_meta (location, next_bill_no) VALUES (?, 1)',
+      [location],
     );
-
-    if (rows.isEmpty) {
-      await db.insert('location_meta', {
-        'location': location,
-        'next_bill_no': 1,
-      });
-    }
   }
 
   Future<void> _advanceNextBillNo(String location, int usedBillNo) async {
-    await _ensureLocationMeta(location);
-    final db = await database;
+    final fromBills = await peekNextBillNoFromBills(location);
     final next = usedBillNo + 1;
+    await _setNextBillNo(location, next > fromBills ? next : fromBills);
+  }
 
-    await db.rawUpdate(
-      '''
-      UPDATE location_meta
-      SET next_bill_no = MAX(next_bill_no, ?)
-      WHERE location = ?
-      ''',
-      [next, location],
-    );
+  Future<void> refreshNextBillNoFromBills(String location) async {
+    await _refreshNextBillNoFromBills(location);
   }
 
   Future<void> _refreshNextBillNoFromBills(String location) async {
+    final next = await peekNextBillNoFromBills(location);
+    await _setNextBillNo(location, next);
+  }
+
+  Future<int?> _maxBillNoForLocation(String location) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT MAX(bill_no) AS max_no FROM bills WHERE location = ?',
+      '''
+      SELECT MAX(bill_no) AS max_no
+      FROM bills
+      WHERE location = ? AND deleted = 0
+      ''',
       [location],
     );
-
     final maxNo = result.first['max_no'];
     if (maxNo == null) {
-      return;
+      return null;
     }
+    return (maxNo as num).toInt();
+  }
 
-    await _advanceNextBillNo(location, (maxNo as num).toInt());
+  Future<void> _setNextBillNo(String location, int nextBillNo) async {
+    await _ensureLocationMeta(location);
+    final db = await database;
+    await db.update(
+      'location_meta',
+      {'next_bill_no': nextBillNo},
+      where: 'location = ?',
+      whereArgs: [location],
+    );
   }
 
   static Map<String, Object?> _billToRow(
@@ -1111,6 +1213,7 @@ class LocalDb {
         grandTotal: (row['grand_total'] as num).toDouble(),
         syncStatus: row['sync_status'] as String? ?? 'pending',
         updatedAt: row['updated_at'] as String? ?? '',
+        groupSummary: groupSummaryFromItemsJson(row['items_json'] as String?),
       );
     } catch (_) {
       return null;

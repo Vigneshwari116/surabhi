@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 class SalesAbstractScreen extends StatefulWidget {
   final String location;
@@ -95,8 +97,7 @@ class _SalesAbstractScreenState extends State<SalesAbstractScreen> {
       appBar: sectionHeaderAppBar('SALES ABSTRACT'),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : CenteredContent(
-              maxWidth: 1100,
+          : ReportFullWidthBody(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -138,6 +139,7 @@ class _SalesAbstractScreenState extends State<SalesAbstractScreen> {
                     amountValue:
                         _formatMoney(_summary?.totalSaleAmount ?? 0),
                     gstValue: _formatMoney(_summary?.totalGst ?? 0),
+                    pcsValue: formatPcs(_summary?.totalPcs ?? 0),
                     grandTotalValue: _formatMoney(
                       (_summary?.totalSaleAmount ?? 0) +
                           (_summary?.totalGst ?? 0),

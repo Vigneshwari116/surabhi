@@ -4,32 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/app_license.dart';
 import 'package:surabhi/config/local_credentials.dart';
-import 'package:surabhi/screen/admin_dashboard_screen.dart';
 import 'package:surabhi/screen/staff_dashboard_screen.dart';
-import 'package:surabhi/screen/summary_viewer_dashboard_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 
-/// Single login for staff (win1–win3) and admin — no role toggle on screen.
+/// Staff login for the shop PC.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
-  /// Test seam: replace dashboard destinations without mounting heavy screens.
-  @visibleForTesting
-  static WidgetBuilder? adminHomeBuilder;
-
+  /// Test seam: replace dashboard destination without mounting heavy screens.
   @visibleForTesting
   static WidgetBuilder? staffHomeBuilder;
 
   @visibleForTesting
-  static WidgetBuilder? summaryHomeBuilder;
-
-  @visibleForTesting
   static void resetTestHooks() {
-    adminHomeBuilder = null;
     staffHomeBuilder = null;
-    summaryHomeBuilder = null;
   }
 
   @override
@@ -62,11 +52,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final username = _userCtrl.text.trim();
     final password = _passCtrl.text.trim();
 
-    final isAdmin = verifyAdminLogin(username, password);
     final isStaff = verifyStaffLogin(username, password);
-    final isSummaryViewer = verifySummaryViewerLogin(username, password);
 
-    if (!isAdmin && !isStaff && !isSummaryViewer) {
+    if (!isStaff) {
       setState(() => _error = 'Incorrect username or password.');
       return;
     }
@@ -77,37 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await SessionService.clearBillSession();
-
-      if (isAdmin) {
-        await AppConfig.setLocation('main');
-        await SessionService.saveLogin(username, role: SessionRole.admin);
-
-        if (!mounted) return;
-
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: LoginScreen.adminHomeBuilder ??
-                (_) => const AdminDashboardScreen(),
-          ),
-        );
-        unawaited(AppSessionService.onLoginComplete());
-        return;
-      }
-
-      if (isSummaryViewer) {
-        await SessionService.saveLogin(username, role: SessionRole.summaryViewer);
-
-        if (!mounted) return;
-
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: LoginScreen.summaryHomeBuilder ??
-                (_) => const SummaryViewerDashboardScreen(),
-          ),
-        );
-        unawaited(AppSessionService.onLoginComplete());
-        return;
-      }
 
       final locationCode = staffLocationCodeForUsername(username);
       await AppConfig.setLocation(locationCode);
@@ -160,17 +117,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(
-                      Icons.storefront,
-                      size: 48,
-                      color: AppColors.navy,
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          'assets/images/itemscan_logo.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     const Text(
-                      'Sales Bill Login',
+                      'Login',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: AppTextSizes.sectionHeader,
                         fontWeight: FontWeight.bold,
                         color: AppColors.navy,
                       ),

@@ -7,11 +7,13 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
+import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
+import 'package:surabhi/models/save_bill_result.dart';
 import 'package:surabhi/repositories/bill_repository.dart';
+import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
 
 class _FakePathProvider extends Fake
@@ -62,11 +64,49 @@ void main() {
   });
 
   tearDown(() async {
+    await SummaryDb.resetForTesting();
     await LocalDb.resetForTesting();
     await AppConfig.clearLocation();
   });
 
-  test('offline save updates existing bill instead of failing duplicate', () async {
+  test('save finishes under 1s and writes local bill, ledger, and summary',
+      () async {
+    final bill = _sampleBill(billNo: 42, rate: 200);
+    final stopwatch = Stopwatch()..start();
+    final result = await BillRepository.saveBill(bill);
+    stopwatch.stop();
+
+    expect(stopwatch.elapsedMilliseconds, lessThan(1000));
+    expect(result.ok, isTrue);
+    expect(result.billNo, 42);
+
+    final stored = await LocalDb.instance.getBillByNumber(
+      location: 'Surabhi',
+      billNo: 42,
+    );
+    expect(stored, isNotNull);
+    expect(stored!.bill.grandTotal, bill.grandTotal);
+    expect(stored.syncStatus, kLocalBillSyncStatus);
+
+    await SummaryDb.instance.initialize();
+    final dayRows = await SummaryDb.instance.getDayTotalsForMonth(
+      location: 'Surabhi',
+      year: bill.billDate.year,
+      month: bill.billDate.month,
+    );
+    expect(
+      dayRows.any((row) => row.totalAmount > 0),
+      isTrue,
+    );
+
+    final ledger = await LedgerRepository.getLedger(location: 'Surabhi');
+    expect(
+      ledger.entries.any((e) => e.billNo == 42),
+      isTrue,
+    );
+  });
+
+  test('offline save uses next free bill number when number is taken', () async {
     final bill = _sampleBill();
     await LocalDb.instance.insertPendingBill(bill);
 
@@ -74,11 +114,18 @@ void main() {
     final result = await BillRepository.saveBill(updated);
 
     expect(result.ok, isTrue);
+    expect(result.billNo, 2);
 
     final stored = await LocalDb.instance.getBillByNumber(
       location: 'Surabhi',
-      billNo: 1,
+      billNo: 2,
     );
     expect(stored?.bill.totalAmount, 137);
+
+    final original = await LocalDb.instance.getBillByNumber(
+      location: 'Surabhi',
+      billNo: 1,
+    );
+    expect(original?.bill.totalAmount, 100);
   });
 }

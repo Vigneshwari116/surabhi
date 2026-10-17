@@ -35,7 +35,6 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   intl: ^0.19.0
-  http: ^1.6.0
   shared_preferences: ^2.5.5
   path_provider: ^2.1.5
   printing: ^5.14.2
@@ -44,8 +43,6 @@ dependencies:
   sqflite_common_ffi: ^2.3.3
   path: ^1.9.1
   uuid: ^4.5.1
-  connectivity_plus: ^6.1.4
-  excel: ^4.0.6
   share_plus: ^10.1.4
   windows_printer: ^0.2.1
 
@@ -61,6 +58,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -74,6 +72,9 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/fonts/consolas.ttf
+    - assets/icon/app_icon.png
+    - assets/images/itemscan_logo.png
     - assets/seed/win1_sales.csv
     - assets/seed/win2_sales.csv
     - assets/seed/win3_sales.csv
@@ -106,3 +107,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icon/app_icon.png
+  web:
+    generate: true
+    image_path: assets/icon/app_icon.png
+    background_color: "#D1001C"
+    theme_color: "#D1001C"
+  windows:
+    generate: true
+    image_path: assets/icon/app_icon.png
+  macos:
+    generate: true
+    image_path: assets/icon/app_icon.png

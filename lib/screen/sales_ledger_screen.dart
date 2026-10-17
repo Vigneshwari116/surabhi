@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/repositories/day_drill_down_repository.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
-import 'package:surabhi/screen/admin_day_bills_screen.dart';
 import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/ledger_group_display.dart';
+import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 class SalesLedgerScreen extends StatefulWidget {
   final String location;
@@ -46,13 +46,17 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 860;
+  static const double _tableMinWidth = 900;
+
+  /// Minimum width for GROUP (~20 characters at report table font size).
+  static const double _groupColumnMinWidth = 200;
+
+  static const double _cellHPad = 3;
+  static const double _cellVPad = 4;
 
   bool _loading = true;
-  bool _pulling = false;
   bool _exportingPdf = false;
   List<LocalLedgerEntry> _entries = [];
-  List<DaySummaryRow> _daySummaries = const [];
   LedgerSummary? _summary;
   DateTime _fromDate = DateTime.now();
   DateTime _toDate = DateTime.now();
@@ -62,9 +66,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
   void initState() {
     super.initState();
     _loadLedger();
-    if (widget.autoRefreshOnOpen) {
-      _pullInBackground();
-    }
   }
 
   @override
@@ -85,33 +86,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         '${date.day.toString().padLeft(2, '0')}';
   }
 
-  bool get _isMultiDayRange {
-    if (!_customRange) {
-      return false;
-    }
-    return _fromKey != _toKey;
-  }
-
   Future<void> _loadLedger() async {
     setState(() => _loading = true);
-
-    if (_isMultiDayRange) {
-      final days = await DayDrillDownRepository.getDaySummaries(
-        fromDate: _fromDate,
-        toDate: _toDate,
-        location: widget.location,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _daySummaries = days;
-        _entries = const [];
-        _summary = null;
-        _loading = false;
-      });
-      return;
-    }
 
     final ({
       List<LocalLedgerEntry> entries,
@@ -133,49 +109,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     setState(() {
       _entries = result.entries;
       _summary = result.summary;
-      _daySummaries = const [];
       _loading = false;
     });
-  }
-
-  Future<void> _openDay(DaySummaryRow row) async {
-    if (!row.hasLineItemDetail) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AdminDayBillsScreen(
-          day: row.day,
-          title: row.label,
-          location: widget.location,
-          adminFullEdit: widget.adminFullEdit,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pullInBackground({bool showFeedback = false}) async {
-    setState(() => _pulling = true);
-
-    final result = await SyncService.instance.pullAdminUpdates(widget.location);
-
-    if (!mounted) return;
-
-    setState(() => _pulling = false);
-    await _loadLedger();
-
-    if (!mounted || !showFeedback) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok
-              ? 'Pulled ${result.pulledCount} bill update(s) for ${widget.location}'
-              : 'Pull failed: ${result.error ?? "unknown error"}',
-        ),
-      ),
-    );
   }
 
   void _setToday() {
@@ -241,12 +176,12 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
       return;
     }
 
-    final updated = await Navigator.of(context).push<bool>(
+    final updated = await Navigator.of(context, rootNavigator: true).push<bool>(
       MaterialPageRoute<bool>(
+        fullscreenDialog: true,
         builder: (_) => LedgerBillDetailScreen(
           bill: bill,
           localId: entry.localId,
-          syncStatus: entry.syncStatus,
           readOnly: widget.readOnly && !widget.adminFullEdit,
           adminFullEdit: widget.adminFullEdit,
         ),
@@ -331,22 +266,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
               icon: const Icon(Icons.picture_as_pdf_outlined),
               tooltip: 'Save as PDF',
             ),
-          if (_pulling)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.navy,
-                  ),
-                ),
-              ),
-            ),
           IconButton(
-            onPressed: () => _pullInBackground(showFeedback: true),
+            onPressed: _loadLedger,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
@@ -393,113 +314,22 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: _isMultiDayRange
-                      ? _buildDaySummaryList()
-                      : _entries.isEmpty
-                          ? _buildEmptyState()
-                          : CenteredContent(
-                          maxWidth: 1100,
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final needsHScroll =
-                                  constraints.maxWidth < _tableMinWidth;
-                              final table = _buildTable();
-
-                              if (!needsHScroll) {
-                                return SingleChildScrollView(child: table);
-                              }
-
-                              return SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: SingleChildScrollView(
-                                  child: SizedBox(
-                                    width: _tableMinWidth,
-                                    child: table,
-                                  ),
-                                ),
-                              );
-                            },
+                  child: _entries.isEmpty
+                      ? _buildEmptyState()
+                      : ReportFullWidthBody(
+                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                          child: ReportTableViewport(
+                            minTableWidth: _tableMinWidth,
+                            header: _headerRow(),
+                            footer: _summary != null
+                                ? _summaryRow()
+                                : const SizedBox.shrink(),
+                            bodyRows: _entries.map(_dataRow).toList(),
                           ),
                         ),
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _buildDaySummaryList() {
-    if (_daySummaries.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      itemCount: _daySummaries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final row = _daySummaries[index];
-        final canDrill = row.hasLineItemDetail;
-
-        return Material(
-          color: AppColors.cardWhite,
-          borderRadius: BorderRadius.circular(6),
-          child: InkWell(
-            onTap: canDrill ? () => _openDay(row) : null,
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          row.label,
-                          style: const TextStyle(
-                            fontSize: AppTextSizes.listTitle,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                        if (!canDrill)
-                          const Text(
-                            'Grand total only',
-                            style: TextStyle(
-                              fontSize: AppTextSizes.listSubtitle,
-                              color: AppColors.mutedBlue,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    _formatMoney(row.grandTotal),
-                    style: const TextStyle(
-                      fontSize: AppTextSizes.listTitle,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                  if (canDrill) ...[
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: AppColors.mutedBlue,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -536,26 +366,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     );
   }
 
-  Widget _buildTable() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _headerRow(),
-          ..._entries.map(_dataRow),
-          if (_summary != null) _summaryRow(),
-        ],
-      ),
-    );
-  }
-
   Widget _headerRow() {
     return Container(
       color: AppColors.tableHeader,
@@ -563,13 +373,27 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         children: [
           _cell('BILLNO', flex: 6, bold: true),
           _cell('DATE', flex: 7, bold: true),
-          _cell('NAME', flex: 10, bold: true),
-          _cell('MOBILE', flex: 8, bold: true),
+          _cell('NAME', flex: 9, bold: true),
+          _cell(
+            'GROUP',
+            flex: 9,
+            bold: true,
+            minWidth: _groupColumnMinWidth,
+          ),
+          _cell('MOBILE', flex: 7, bold: true),
+          _cell('PCS', flex: 5, bold: true, alignRight: true, minWidth: 56),
           _cell('CASH', flex: 7, bold: true, alignRight: true),
           _cell('CARD/UPI', flex: 7, bold: true, alignRight: true),
           _cell('TOTAL', flex: 7, bold: true, alignRight: true),
           _cell('GST', flex: 6, bold: true, alignRight: true),
-          _cell('GRAND TOTAL', flex: 8, bold: true, alignRight: true),
+          _cell(
+            'GRAND\nTOTAL',
+            flex: 10,
+            bold: true,
+            alignRight: true,
+            minWidth: 72,
+            cellKey: const Key('ledger_grand_total_header'),
+          ),
         ],
       ),
     );
@@ -577,22 +401,34 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
 
   Widget _dataRow(LocalLedgerEntry entry) {
     return GestureDetector(
+      key: Key('ledger_row_${entry.billNo}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _viewBill(entry),
-      child: Row(
-        children: [
+      child: IntrinsicHeight(
+        child: Row(
+          key: Key('ledger_row_flex_${entry.billNo}'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           _cell('${entry.billNo}', flex: 6),
           _cell(_formatDate(entry.date), flex: 7),
-          _cell(entry.customerName, flex: 10),
-          _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 8),
+          _cell(entry.customerName, flex: 9),
+          _cell(
+            LedgerGroupDisplay.formatForDisplay(entry.groupSummary),
+            flex: 9,
+            minWidth: _groupColumnMinWidth,
+            multiline: true,
+          ),
+          _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
+          _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: true),
               flex: 7, alignRight: true),
           _cell(_paymentColumnAmount(entry, cash: false),
               flex: 7, alignRight: true),
           _cell(_formatMoney(entry.total), flex: 7, alignRight: true),
           _cell(_formatMoney(_entryGst(entry)), flex: 6, alignRight: true),
-          _cell(_formatMoney(entry.grandTotal), flex: 8, alignRight: true),
+          _cell(_formatMoney(entry.grandTotal), flex: 10, alignRight: true),
         ],
+        ),
       ),
     );
   }
@@ -606,8 +442,15 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         children: [
           _cell('', flex: 6, bold: true),
           _cell('', flex: 7, bold: true),
-          _cell('', flex: 10, bold: true),
-          _cell('', flex: 8, bold: true),
+          _cell('', flex: 9, bold: true),
+          _cell('', flex: 9, bold: true),
+          _cell('', flex: 7, bold: true),
+          _cell(
+            formatPcs(summary.totalPcs),
+            flex: 5,
+            bold: true,
+            alignRight: true,
+          ),
           _cell(_formatMoney(payTotals.cash),
               flex: 7, bold: true, alignRight: true),
           _cell(_formatMoney(payTotals.card),
@@ -617,7 +460,7 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           _cell(_formatMoney(_summaryGst(summary)),
               flex: 6, bold: true, alignRight: true),
           _cell(_formatMoney(summary.grandTotal),
-              flex: 8, bold: true, alignRight: true),
+              flex: 10, bold: true, alignRight: true),
         ],
       ),
     );
@@ -628,25 +471,45 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     required int flex,
     bool bold = false,
     bool alignRight = false,
+    double? minWidth,
+    bool multiline = false,
+    Key? cellKey,
   }) {
+    final alignment = alignRight
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
+
     return Expanded(
       flex: flex,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-        decoration: const BoxDecoration(
-          border: Border(
-            right: BorderSide(color: AppColors.border, width: 0.6),
-            bottom: BorderSide(color: AppColors.border, width: 0.6),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: minWidth ?? 0),
+        child: Container(
+          key: cellKey,
+          padding: const EdgeInsets.symmetric(
+            horizontal: _cellHPad,
+            vertical: _cellVPad,
           ),
-        ),
-        child: Text(
-          text,
-          textAlign: alignRight ? TextAlign.right : TextAlign.left,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-            color: AppColors.navy,
+          alignment: alignment,
+          decoration: const BoxDecoration(
+            border: Border(
+              right: BorderSide(color: AppColors.border, width: 0.6),
+              bottom: BorderSide(color: AppColors.border, width: 0.6),
+            ),
+          ),
+          child: Text(
+            text,
+            textAlign: alignRight ? TextAlign.right : TextAlign.left,
+            maxLines: multiline ? null : (bold ? 2 : 1),
+            softWrap: multiline ? false : bold,
+            overflow: multiline ? TextOverflow.clip : TextOverflow.visible,
+            style: TextStyle(
+              fontSize: bold
+                  ? AppTextSizes.reportTableHeaderText
+                  : AppTextSizes.reportTableRowText,
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              color: AppColors.navy,
+              height: multiline ? 1.15 : null,
+            ),
           ),
         ),
       ),

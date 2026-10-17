@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/screen/sales_ledger_screen.dart';
-import 'package:surabhi/services/sync_service.dart';
 
 const _localId = 'drill-down-local-id';
 
@@ -25,7 +24,8 @@ LocalLedgerEntry _sampleLedgerEntry() {
     sgst: 2.5,
     igst: 0,
     grandTotal: 105,
-    syncStatus: 'synced',
+    pcs: 1,
+    syncStatus: 'pending',
   );
 }
 
@@ -65,15 +65,12 @@ Future<
       sgst: entry.sgst,
       igst: entry.igst,
       grandTotal: entry.grandTotal,
+      totalPcs: entry.pcs,
     ),
   );
 }
 
 void main() {
-  tearDown(() async {
-    await SyncService.resetForTesting();
-  });
-
   testWidgets('tapping ledger row opens read-only bill detail', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -101,7 +98,8 @@ void main() {
     expect(find.byType(LedgerBillDetailScreen), findsOneWidget);
     expect(find.text('BILL 7'), findsOneWidget);
     expect(find.text('9999999999'), findsOneWidget);
-    expect(find.text('Synced'), findsOneWidget);
+    expect(find.text('Pending sync'), findsNothing);
+    expect(find.text('Synced'), findsNothing);
   });
 
   testWidgets('shows snackbar when bill cannot be loaded', (tester) async {
@@ -125,31 +123,5 @@ void main() {
 
     expect(find.text('Could not load bill'), findsOneWidget);
     expect(find.byType(LedgerBillDetailScreen), findsNothing);
-  });
-
-  testWidgets('row tap opens detail while manual push is in progress', (tester) async {
-    SyncService.instance.manualPushInProgress.value = true;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SalesLedgerScreen(
-          location: 'Surabhi',
-          autoRefreshOnOpen: false,
-          loadLedgerOverride: _loadSampleLedger,
-          loadBillOverride: (_) async => _sampleBill(),
-        ),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(SyncService.instance.manualPushInProgress.value, isTrue);
-
-    await tester.tap(find.text('Drill Down Customer'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(LedgerBillDetailScreen), findsOneWidget);
-    expect(find.text('BILL 7'), findsOneWidget);
   });
 }

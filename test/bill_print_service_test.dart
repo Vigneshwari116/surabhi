@@ -1,7 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
 import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 
 SaleBill _sampleBill() {
@@ -12,7 +16,7 @@ SaleBill _sampleBill() {
     paymentMode: 'CASH',
     customerName: '',
     mobile: '',
-    items: [BillItem(qty: 1, rate: 1000)],
+    items: [BillItem(particular: 'Shirt', qty: 1, rate: 1000)],
     totalQty: 1,
     totalAmount: 952.38,
     totalCgst: 24,
@@ -22,9 +26,23 @@ SaleBill _sampleBill() {
   );
 }
 
+Printer _printer({
+  required String name,
+  String url = '',
+  bool isDefault = false,
+  bool isAvailable = true,
+}) {
+  return Printer(
+    name: name,
+    url: url,
+    isDefault: isDefault,
+    isAvailable: isAvailable,
+  );
+}
+
 void main() {
   test('name and mobile lines are consecutive without blank lines', () {
-    final lines = ReceiptService.buildReceiptText(_sampleBill()).split('\n');
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final nameIndex = lines.indexWhere((line) => line.startsWith('NAME:'));
     final mobileIndex = lines.indexWhere((line) => line.startsWith('MOBILE:'));
 
@@ -34,10 +52,11 @@ void main() {
   });
 
   test('receipt footer lines are present after grand total', () {
-    final text = ReceiptService.buildReceiptText(_sampleBill());
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
+    final text = lines.join('\n');
 
     expect(text, contains('TERMS AND CONDITION'));
-    expect(text, contains('EXCHANGE ONLY 3 DAYS'));
+    expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
     expect(text, contains('AMOUNT NOT REFUND'));
     expect(text, contains('THANK YOU VISIT AGAIN'));
 
@@ -46,16 +65,15 @@ void main() {
     expect(footerIndex, greaterThan(grandTotalIndex));
   });
 
-  test('thermal pdf uses 80mm page width and RP3200 Font A line spacing', () async {
+  test('thermal pdf uses 66mm page width, computed font, and dynamic height',
+      () async {
     final bill = _sampleBill();
-    final text = ReceiptService.buildReceiptText(bill);
-    final lineCount = text.split('\n').length;
+    final receiptLines = ReceiptService.buildReceiptLines(bill);
     final bytes = await BillPrintService.buildPdfBytes(bill);
     final pageFormat = BillPrintService.pageFormatForBill(bill);
     final pdfText = String.fromCharCodes(bytes);
 
     expect(bytes, isNotEmpty);
-    expect(bytes.length, greaterThan(500));
     expect(pdfText, contains('/MediaBox'));
     final mediaBoxMatch =
         RegExp(r'/MediaBox\[0 0 ([\d.]+) ([\d.]+)\]').firstMatch(pdfText);
@@ -63,15 +81,236 @@ void main() {
     final pageWidthPt = double.parse(mediaBoxMatch!.group(1)!);
     final pageHeightPt = double.parse(mediaBoxMatch.group(2)!);
 
-    // 80mm ≈ 226.77pt; allow small float tolerance from PDF generation.
+    final expectedWidthPt =
+        BillPrintService.thermalPdfPageWidthMm * PdfPageFormat.mm;
     expect(pageWidthPt, closeTo(pageFormat.width, 1.0));
-    expect(pageWidthPt, closeTo(226.77, 2.0));
-    expect(pageHeightPt, closeTo(pageFormat.height, 2.0));
+    expect(pageWidthPt, closeTo(expectedWidthPt, 1.5));
+    expect(
+      pageFormat.marginLeft,
+      closeTo(ReceiptLayout.marginLeftMm * PdfPageFormat.mm, 0.5),
+    );
+    expect(
+      pageFormat.marginRight,
+      closeTo(ReceiptLayout.marginRightMm * PdfPageFormat.mm, 0.5),
+    );
+    expect(
+      BillPrintService.thermalFontSizePt(),
+      ReceiptLayout.bodyFontSizePt(),
+    );
 
-    // Height grows with 4.25mm per line (RP3200 default line spacing).
-    final expectedHeightMm =
-        lineCount * BillPrintService.thermalLineSpacingMm + 8.0;
-    final actualHeightMm = pageHeightPt / 72 * 25.4;
-    expect(actualHeightMm, closeTo(expectedHeightMm, 2.0));
+    var expectedHeightMm = BillPrintService.thermalPdfMarginTopMm +
+        BillPrintService.thermalPdfMarginBottomMm;
+    for (final line in receiptLines) {
+      final trimmed = line.trim();
+      if (trimmed == ReceiptService.businessName) {
+        expectedHeightMm += BillPrintService.thermalHeaderLineSpacingMm;
+      } else if (trimmed.startsWith('GRAND TOTAL')) {
+        expectedHeightMm += BillPrintService.thermalGrandTotalLineSpacingMm;
+      } else {
+        expectedHeightMm += BillPrintService.thermalLineSpacingMm;
+      }
+    }
+    final actualHeightMm = pageHeightPt / PdfPageFormat.mm;
+    expect(actualHeightMm, closeTo(expectedHeightMm, 1.0));
+  });
+
+  group('resolveTargetPrinter', () {
+    test('exact name match', () {
+      final printers = [
+        _printer(name: 'Kitchen'),
+        _printer(name: 'RP3200', url: 'winspool'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'RP3200',
+      );
+
+      expect(resolved?.printer.name, 'RP3200');
+    });
+
+    test('fuzzy name match when exact name missing', () {
+      final printers = [
+        _printer(name: 'TVS RP3200 Series'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'rp3200',
+      );
+
+      expect(resolved?.printer.name, 'TVS RP3200 Series');
+    });
+
+    test('falls back to default printer', () {
+      final printers = [
+        _printer(name: 'Other'),
+        _printer(name: 'Windows Default', isDefault: true),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'Missing Printer',
+      );
+
+      expect(resolved?.printer.name, 'Windows Default');
+    });
+
+    test('returns null when no printers exist', () {
+      expect(
+        BillPrintService.resolveTargetPrinter(
+          printers: [],
+          savedPrinterName: 'Anything',
+        ),
+        isNull,
+      );
+    });
+
+    test('never selects a virtual printer', () {
+      final printers = [
+        _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        _printer(name: 'RP3200', isDefault: true),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'Microsoft Print to PDF',
+      );
+
+      expect(resolved?.printer.name, 'RP3200');
+    });
+
+    test('returns null when only virtual printers exist', () {
+      final printers = [
+        _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        _printer(name: 'OneNote for Windows 10'),
+      ];
+
+      expect(
+        BillPrintService.resolveTargetPrinter(
+          printers: printers,
+          savedPrinterName: '',
+        ),
+        isNull,
+      );
+    });
+
+    test('uses default when saved name is empty', () {
+      final printers = [
+        _printer(name: 'Counter', isDefault: true),
+        _printer(name: 'Backup'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: '',
+      );
+
+      expect(resolved?.printer.name, 'Counter');
+    });
+
+    test('saved name missing uses first physical printer', () {
+      final printers = [
+        _printer(name: 'Backup'),
+        _printer(name: 'Counter'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'Missing Printer',
+      );
+
+      expect(resolved?.printer.name, 'Backup');
+      expect(resolved?.source, PrinterPickSource.firstPhysical);
+    });
+  });
+
+  test('receipt lines include SURABHI EXPORT shop name', () {
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
+    expect(lines.join('\n'), contains('SURABHI EXPORT'));
+  });
+
+  test('printReceipt sends to printer without saving a PDF file', () async {
+    BillPrintService.desktopPdfSaveCount = 0;
+    var directPrintCalls = 0;
+
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Thermal POS', isDefault: true),
+        ];
+    BillPrintService.directPrintOverride = ({
+      required printer,
+      required onLayout,
+      required name,
+      required format,
+    }) async {
+      directPrintCalls++;
+      final bytes = await onLayout(format);
+      expect(bytes, isNotEmpty);
+      return true;
+    };
+
+    try {
+      final ok = await BillPrintService.printReceipt(
+        _sampleBill(),
+        printerName: 'Thermal POS',
+      );
+      expect(ok, isTrue);
+      expect(directPrintCalls, 1);
+      expect(BillPrintService.desktopPdfSaveCount, 0);
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+      BillPrintService.directPrintOverride = null;
+    }
+  });
+
+  test('printReceipt surfaces error when direct print returns false', () async {
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Thermal POS', isDefault: true),
+        ];
+    BillPrintService.directPrintOverride = ({
+      required printer,
+      required onLayout,
+      required name,
+      required format,
+    }) async {
+      return false;
+    };
+
+    try {
+      await expectLater(
+        BillPrintService.printReceipt(
+          _sampleBill(),
+          printerName: 'Thermal POS',
+        ),
+        throwsA(
+          predicate(
+            (e) =>
+                e is BillPrintException &&
+                e.message.contains('returned false'),
+          ),
+        ),
+      );
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+      BillPrintService.directPrintOverride = null;
+    }
+  });
+
+  test('printReceipt throws when no physical printer is available', () async {
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        ];
+
+    try {
+      await expectLater(
+        BillPrintService.printReceipt(
+          _sampleBill(),
+          printerName: '',
+        ),
+        throwsA(isA<BillPrintException>()),
+      );
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+    }
   });
 }
