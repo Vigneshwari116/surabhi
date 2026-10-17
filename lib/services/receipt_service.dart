@@ -22,7 +22,9 @@ class ReceiptService {
   static const int _rateW = ReceiptLayout.rateWidth;
   static const int _qtyW = ReceiptLayout.qtyWidth;
   static const int _amountW = ReceiptLayout.amountWidth;
-  static const int _labelW = _contentWidth - _amountW;
+  static const int _footerAmountW = 7;
+  static const int _footerLabelW = _contentWidth - _footerAmountW;
+  static const int _labelW = _footerLabelW;
 
   static String buildReceiptText(SaleBill bill) {
     return buildReceiptLines(bill).join('\n');
@@ -260,19 +262,13 @@ class ReceiptService {
   }
 
   static String _totalLine(double qty, double taxableTotal) {
-    final leftWidth =
-        _snoW + ReceiptLayout.columnGap + _groupW + ReceiptLayout.columnGap + _rateW;
-    final left = _padRight('TOTAL PCS', leftWidth);
-    return '$left'
-        '$_gap'
-        '${_padLeft(_wholeNumber(qty), _qtyW)}'
-        '$_gap'
-        '${_padLeft(_wholeNumber(taxableTotal), _amountW)}';
+    final label = 'TOTAL PCS ${_wholeNumber(qty)}';
+    return _rightAmountLineDecimals(label, taxableTotal);
   }
 
   static String _rightAmountLine(String label, double amount) {
-    final labelPart = _padRight(label, _labelW);
-    return '$labelPart${_padLeft(_wholeNumber(amount), _amountW)}';
+    final labelPart = _padRight(label, _footerLabelW);
+    return '$labelPart${_padLeft(_twoDecimals(amount), _footerAmountW)}';
   }
 
   static String _taxAmountLine(String kind, double amount, double pct) {
@@ -281,8 +277,8 @@ class ReceiptService {
   }
 
   static String _rightAmountLineDecimals(String label, double amount) {
-    final labelPart = _padRight(label, _labelW);
-    return '$labelPart${_padLeft(_twoDecimals(amount), _amountW)}';
+    final labelPart = _padRight(label, _footerLabelW);
+    return '$labelPart${_padLeft(_twoDecimals(amount), _footerAmountW)}';
   }
 
   static String _fieldLine(String label, String value) {

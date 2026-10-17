@@ -105,7 +105,7 @@ void main() {
     _expectLinesWithinWidth(lines);
   });
 
-  test('total line labels quantity as TOTAL PCS with whole numbers', () {
+  test('total line labels quantity as TOTAL PCS with two-decimal taxable', () {
     final bill = SaleBill(
       billNo: 1,
       location: 'Surabhi',
@@ -126,8 +126,7 @@ void main() {
     final lines = ReceiptService.buildReceiptLines(bill);
     final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
     expect(totalLine, contains('132'));
-    expect(totalLine, contains('1257'));
-    expect(totalLine, isNot(contains('.')));
+    expect(totalLine.trimRight(), endsWith('1257.14'));
   });
 
   test('receipt prints gst percents on tax rows with two decimals', () {
@@ -138,15 +137,14 @@ void main() {
     expect(text, contains('1.19'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
-    expect(text, contains('50'));
-    expect(text, contains('48'));
-    expect(text, isNot(contains('47.62')));
+    expect(text, contains('50.00'));
+    expect(text, contains('47.62'));
 
     final gstMatches = 'CGST 2.5%'.allMatches(text).length;
     expect(gstMatches, 1);
   });
 
-  test('rate 30 qty 2 prints taxable 57 with gst 1.50 each and grand 60',
+  test('rate 30 qty 2 prints taxable 57.14 with gst 1.43 each and grand 60.00',
       () {
     final bill = SaleBill(
       billNo: 1,
@@ -159,23 +157,23 @@ void main() {
         BillItem(particular: 'Shirt', qty: 2, rate: 30),
       ],
       totalQty: 2,
-      totalAmount: 57,
-      totalCgst: 1.5,
-      totalSgst: 1.5,
+      totalAmount: 57.14,
+      totalCgst: 1.43,
+      totalSgst: 1.43,
       totalIgst: 0,
       grandTotal: 60,
     );
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final text = lines.join('\n');
+    final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
+    final grandLine = lines.firstWhere((line) => line.contains('GRAND TOTAL'));
 
-    expect(text, contains('TOTAL PCS'));
-    expect(text, contains('57'));
+    expect(totalLine.trimRight(), endsWith('57.14'));
     expect(text, contains('CGST 2.5%'));
-    expect(text, contains('1.50'));
+    expect(text, contains('1.43'));
     expect(text, contains('SGST 2.5%'));
-    expect(text, contains('GRAND TOTAL'));
-    expect(text, contains('60'));
+    expect(grandLine.trimRight(), endsWith('60.00'));
     _expectLinesWithinWidth(lines);
   });
 
@@ -191,19 +189,19 @@ void main() {
         BillItem(particular: 'Coat', qty: 1, rate: 10000),
       ],
       totalQty: 1,
-      totalAmount: 9524,
-      totalCgst: 168,
-      totalSgst: 168,
+      totalAmount: 9523.81,
+      totalCgst: 238.10,
+      totalSgst: 238.10,
       totalIgst: 0,
-      grandTotal: 9860,
+      grandTotal: 10000,
     );
 
     final lines = ReceiptService.buildReceiptLines(bill);
     final cgstLine = lines.firstWhere((l) => l.contains('CGST 2.5%'));
     final sgstLine = lines.firstWhere((l) => l.contains('SGST 2.5%'));
 
-    expect(cgstLine.trimRight(), endsWith('168.00'));
-    expect(sgstLine.trimRight(), endsWith('168.00'));
+    expect(cgstLine.trimRight(), endsWith('238.10'));
+    expect(sgstLine.trimRight(), endsWith('238.10'));
     _expectLinesWithinWidth(lines);
   });
 
@@ -389,7 +387,7 @@ void main() {
     );
     final lines = ReceiptService.buildReceiptLines(bill);
     final grandLine = lines.firstWhere((l) => l.contains('GRAND TOTAL'));
-    expect(grandLine.trimRight().endsWith('10'), isTrue);
+    expect(grandLine.trimRight().endsWith('10.40'), isTrue);
   });
 }
 

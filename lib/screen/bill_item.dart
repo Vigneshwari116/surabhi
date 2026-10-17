@@ -1,3 +1,5 @@
+import 'package:surabhi/utils/bill_gst_totals.dart';
+
 class BillItem {
   final String particular;
   final double qty;
@@ -16,91 +18,31 @@ class BillItem {
     this.igstPct = 0,
   });
 
-  // ============================================================
-  // TOTAL GST %
-  // ============================================================
-
   double get totalTaxPct {
     return cgstPct + sgstPct + igstPct;
   }
-
-  // ============================================================
-  // GST-INCLUSIVE TOTAL
-  // ============================================================
 
   double get grossAmt {
     return qty * rate;
   }
 
-  // ============================================================
-  // TAXABLE AMOUNT
-  // ============================================================
+  BillGstTotals get _lineGst => gstTotalsForItem(this);
 
-  double get amount {
-    if (totalTaxPct == 0) {
-      return grossAmt;
-    }
-
-    return (grossAmt / (1 + totalTaxPct / 100)).roundToDouble();
-  }
+  double get amount => _lineGst.totalAmount;
 
   double get taxableAmt => amount;
 
-  // ============================================================
-  // TOTAL TAX
-  // ============================================================
+  double get totalTax => grossAmt - amount;
 
-  double get totalTax {
-    return grossAmt - amount;
-  }
+  double get cgst => _lineGst.totalCgst;
 
-  // ============================================================
-  // CGST
-  // ============================================================
+  double get sgst => _lineGst.totalSgst;
 
-  double get cgst {
-    if (totalTaxPct == 0) {
-      return 0;
-    }
-
-    return totalTax * (cgstPct / totalTaxPct);
-  }
-
-  // ============================================================
-  // SGST
-  // ============================================================
-
-  double get sgst {
-    if (totalTaxPct == 0) {
-      return 0;
-    }
-
-    return totalTax * (sgstPct / totalTaxPct);
-  }
-
-  // ============================================================
-  // IGST
-  // ============================================================
-
-  double get igst {
-    if (totalTaxPct == 0) {
-      return 0;
-    }
-
-    return totalTax * (igstPct / totalTaxPct);
-  }
-
-  // ============================================================
-  // FINAL TOTAL
-  // ============================================================
+  double get igst => _lineGst.totalIgst;
 
   double get netAmt {
     return grossAmt;
   }
-
-  // ============================================================
-  // COPY WITH
-  // ============================================================
 
   BillItem copyWith({
     String? particular,

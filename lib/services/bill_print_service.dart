@@ -8,10 +8,32 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/bill_print_exception.dart';
+import 'package:surabhi/services/print_log_service.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
 import 'package:surabhi/utils/thermal_printer_filter.dart';
+
+enum PrinterPickSource {
+  savedExact,
+  savedFuzzy,
+  osDefault,
+  firstPhysical,
+}
+
+class ResolvedPrinter {
+  final Printer printer;
+  final PrinterPickSource source;
+
+  const ResolvedPrinter({
+    required this.printer,
+    required this.source,
+  });
+
+  bool get shouldPersist =>
+      source == PrinterPickSource.osDefault ||
+      source == PrinterPickSource.firstPhysical;
+}
 
 class BillPrintService {
   /// Thermal PDF tuning (3-inch / RP3200 roll) — adjust here only.
@@ -65,9 +87,9 @@ class BillPrintService {
     return file.path;
   }
 
-  /// Resolves a physical printer: saved name, fuzzy match, then OS default.
+  /// Resolves a physical printer: saved name, fuzzy match, OS default, first physical.
   @visibleForTesting
-  static Printer? resolveTargetPrinter({
+  static ResolvedPrinter? resolveTargetPrinter({
     required List<Printer> printers,
     String savedPrinterName = '',
   }) {
@@ -89,7 +111,10 @@ class BillPrintService {
     if (saved.isNotEmpty) {
       for (final printer in available) {
         if (printer.name == saved || printer.url == saved) {
-          return printer;
+          return ResolvedPrinter(
+            printer: printer,
+            source: PrinterPickSource.savedExact,
+          );
         }
       }
 
@@ -105,7 +130,10 @@ class BillPrintService {
               (urlClean.isNotEmpty &&
                   (urlClean.contains(savedClean) ||
                       savedClean.contains(urlClean)))) {
-            return printer;
+            return ResolvedPrinter(
+              printer: printer,
+              source: PrinterPickSource.savedFuzzy,
+            );
           }
         }
       }
@@ -113,11 +141,17 @@ class BillPrintService {
 
     for (final printer in available) {
       if (printer.isDefault) {
-        return printer;
+        return ResolvedPrinter(
+          printer: printer,
+          source: PrinterPickSource.osDefault,
+        );
       }
     }
 
-    return null;
+    return ResolvedPrinter(
+      printer: available.first,
+      source: PrinterPickSource.firstPhysical,
+    );
   }
 
   static Future<bool> printReceipt(
@@ -133,48 +167,74 @@ class BillPrintService {
       );
     }
 
-    final printers = listPrintersOverride != null
-        ? await listPrintersOverride!()
-        : await Printing.listPrinters();
-    final printer = resolveTargetPrinter(
-      printers: printers,
-      savedPrinterName: printerName,
+    await PrintLogService.append(
+      'print start billNo=${bill.billNo} savedPrinter=${printerName.isEmpty ? '(none)' : printerName}',
     );
 
-    if (printer == null) {
-      throw const BillPrintException(
-        'Printer not found. Choose the thermal printer in Printer settings',
+    try {
+      final printers = listPrintersOverride != null
+          ? await listPrintersOverride!()
+          : await Printing.listPrinters();
+      final resolved = resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: printerName,
       );
-    }
 
-    final layout = _computePageLayout(
-      ReceiptService.buildReceiptLines(bill),
-      type: type,
-    );
+      if (resolved == null) {
+        await PrintLogService.append('printer resolve: none (no physical printer)');
+        throw const BillPrintException(
+          'Printer not found. Choose the thermal printer in Printer settings',
+        );
+      }
 
-    final printed = directPrintOverride != null
-        ? await directPrintOverride!(
-            printer: printer,
-            onLayout: (_) async => _buildPdfBytesFromLayout(layout),
-            name: 'Bill_${bill.billNo}',
-            format: layout.pageFormat,
-          )
-        : await Printing.directPrintPdf(
-            printer: printer,
-            onLayout: (_) async => _buildPdfBytesFromLayout(layout),
-            name: 'Bill_${bill.billNo}',
-            format: layout.pageFormat,
-            dynamicLayout: false,
-            usePrinterSettings: false,
-          );
-
-    if (!printed) {
-      throw const BillPrintException(
-        'Printer not found. Choose the thermal printer in Printer settings',
+      await PrintLogService.append(
+        'printer resolve: name=${resolved.printer.name} source=${resolved.source.name}',
       );
-    }
 
-    return true;
+      if (resolved.shouldPersist) {
+        await PrinterSettingsService.setDefaultPrinter(
+          PrinterType.thermal,
+          resolved.printer.name,
+        );
+        await PrintLogService.append(
+          'printer persisted to settings: ${resolved.printer.name}',
+        );
+      }
+
+      final layout = _computePageLayout(
+        ReceiptService.buildReceiptLines(bill),
+        type: type,
+      );
+
+      final printed = directPrintOverride != null
+          ? await directPrintOverride!(
+              printer: resolved.printer,
+              onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+              name: 'Bill_${bill.billNo}',
+              format: layout.pageFormat,
+            )
+          : await Printing.directPrintPdf(
+              printer: resolved.printer,
+              onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+              name: 'Bill_${bill.billNo}',
+              format: layout.pageFormat,
+              dynamicLayout: false,
+              usePrinterSettings: false,
+            );
+
+      if (!printed) {
+        throw const BillPrintException('Direct thermal print returned false');
+      }
+
+      await PrintLogService.append('print end billNo=${bill.billNo} ok');
+      return true;
+    } catch (e, stackTrace) {
+      await PrintLogService.append('print error: $e\n$stackTrace');
+      if (e is BillPrintException) {
+        rethrow;
+      }
+      throw BillPrintException('$e');
+    }
   }
 
   @visibleForTesting

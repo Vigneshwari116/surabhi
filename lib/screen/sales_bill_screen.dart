@@ -30,6 +30,8 @@ import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/gst_config_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/services/print_log_service.dart';
+import 'package:surabhi/utils/bill_gst_totals.dart';
 import 'package:surabhi/utils/money_format.dart';
 import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
@@ -868,6 +870,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         'Print code $_printCode ignored: save/print already in progress',
         name: 'SalesBill.print777',
       );
+      unawaited(
+        PrintLogService.append('777 ignored: save/print already in progress'),
+      );
       return;
     }
 
@@ -875,6 +880,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       'Print code $_printCode detected',
       name: 'SalesBill.print777',
     );
+    unawaited(PrintLogService.append('777 detected'));
 
     _rateController.text = '0';
     if (_items.isEmpty) {
@@ -883,6 +889,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     }
 
     developer.log('Print code $_printCode: save starting', name: 'SalesBill.print777');
+    unawaited(PrintLogService.append('777 save start billNo=$_billNo'));
     try {
       if (widget.saveBillOverride != null) {
         setState(() => _busy = true);
@@ -897,6 +904,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         await _saveBill();
       }
       developer.log('Print code $_printCode: save finished', name: 'SalesBill.print777');
+      unawaited(PrintLogService.append('777 save end billNo=$_billNo'));
     } catch (e, stackTrace) {
       developer.log(
         'Print code $_printCode: save failed: $e',
@@ -904,6 +912,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         error: e,
         stackTrace: stackTrace,
       );
+      unawaited(PrintLogService.append('777 save error: $e\n$stackTrace'));
       if (mounted) {
         _showMessage('Save failed: $e');
       }
@@ -1163,6 +1172,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   SaleBill _buildCurrentBill() {
+    final totals = _billGstTotals;
     return SaleBill(
       billNo: _billNo,
       location: _selectedLocation,
@@ -1171,14 +1181,16 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       customerName: _customerNameController.text.trim(),
       mobile: _mobileController.text.trim(),
       items: List<BillItem>.from(_items),
-      totalQty: _totalQty,
-      totalAmount: _totalAmount,
-      totalCgst: _totalCgst,
-      totalSgst: _totalSgst,
-      totalIgst: _totalIgst,
-      grandTotal: _grandTotal,
+      totalQty: totals.totalQty,
+      totalAmount: totals.totalAmount,
+      totalCgst: totals.totalCgst,
+      totalSgst: totals.totalSgst,
+      totalIgst: totals.totalIgst,
+      grandTotal: totals.grandTotal,
     );
   }
+
+  BillGstTotals get _billGstTotals => computeBillGstTotalsFromItems(_items);
 
   // ============================================================
   // EXIT
@@ -1202,69 +1214,17 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // TOTAL QTY
   // ============================================================
 
-  double get _totalQty {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.qty,
-    );
-  }
+  double get _totalQty => _billGstTotals.totalQty;
 
-  // ============================================================
-  // TOTAL TAXABLE AMOUNT
-  // ============================================================
+  double get _totalAmount => _billGstTotals.totalAmount;
 
-  double get _totalAmount {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.amount,
-    );
-  }
+  double get _totalCgst => _billGstTotals.totalCgst;
 
-  // ============================================================
-  // TOTAL CGST
-  // ============================================================
+  double get _totalSgst => _billGstTotals.totalSgst;
 
-  double get _totalCgst {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.cgst,
-    );
-  }
+  double get _totalIgst => _billGstTotals.totalIgst;
 
-  // ============================================================
-  // TOTAL SGST
-  // ============================================================
-
-  double get _totalSgst {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.sgst,
-    );
-  }
-
-  // ============================================================
-  // TOTAL IGST
-  // ============================================================
-
-  double get _totalIgst {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.igst,
-    );
-  }
-
-  // ============================================================
-  // GRAND TOTAL
-  //
-  // GST INCLUSIVE
-  // ============================================================
-
-  double get _grandTotal {
-    return _items.fold(
-      0,
-          (sum, item) => sum + item.netAmt,
-    );
-  }
+  double get _grandTotal => _billGstTotals.grandTotal;
 
   // ============================================================
   // CURRENT AMOUNT
@@ -1342,6 +1302,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         stackTrace: stackTrace,
       );
       if (!mounted) return;
+      await _showPrinterNotConfiguredDialog();
       _showMessage('Print failed: $e');
     }
   }

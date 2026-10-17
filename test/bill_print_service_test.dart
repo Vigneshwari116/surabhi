@@ -126,7 +126,7 @@ void main() {
         savedPrinterName: 'RP3200',
       );
 
-      expect(resolved?.name, 'RP3200');
+      expect(resolved?.printer.name, 'RP3200');
     });
 
     test('fuzzy name match when exact name missing', () {
@@ -139,7 +139,7 @@ void main() {
         savedPrinterName: 'rp3200',
       );
 
-      expect(resolved?.name, 'TVS RP3200 Series');
+      expect(resolved?.printer.name, 'TVS RP3200 Series');
     });
 
     test('falls back to default printer', () {
@@ -153,7 +153,7 @@ void main() {
         savedPrinterName: 'Missing Printer',
       );
 
-      expect(resolved?.name, 'Windows Default');
+      expect(resolved?.printer.name, 'Windows Default');
     });
 
     test('returns null when no printers exist', () {
@@ -177,7 +177,7 @@ void main() {
         savedPrinterName: 'Microsoft Print to PDF',
       );
 
-      expect(resolved?.name, 'RP3200');
+      expect(resolved?.printer.name, 'RP3200');
     });
 
     test('returns null when only virtual printers exist', () {
@@ -206,7 +206,22 @@ void main() {
         savedPrinterName: '',
       );
 
-      expect(resolved?.name, 'Counter');
+      expect(resolved?.printer.name, 'Counter');
+    });
+
+    test('saved name missing uses first physical printer', () {
+      final printers = [
+        _printer(name: 'Backup'),
+        _printer(name: 'Counter'),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'Missing Printer',
+      );
+
+      expect(resolved?.printer.name, 'Backup');
+      expect(resolved?.source, PrinterPickSource.firstPhysical);
     });
   });
 
@@ -242,6 +257,39 @@ void main() {
       expect(ok, isTrue);
       expect(directPrintCalls, 1);
       expect(BillPrintService.desktopPdfSaveCount, 0);
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+      BillPrintService.directPrintOverride = null;
+    }
+  });
+
+  test('printReceipt surfaces error when direct print returns false', () async {
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Thermal POS', isDefault: true),
+        ];
+    BillPrintService.directPrintOverride = ({
+      required printer,
+      required onLayout,
+      required name,
+      required format,
+    }) async {
+      return false;
+    };
+
+    try {
+      await expectLater(
+        BillPrintService.printReceipt(
+          _sampleBill(),
+          printerName: 'Thermal POS',
+        ),
+        throwsA(
+          predicate(
+            (e) =>
+                e is BillPrintException &&
+                e.message.contains('returned false'),
+          ),
+        ),
+      );
     } finally {
       BillPrintService.listPrintersOverride = null;
       BillPrintService.directPrintOverride = null;

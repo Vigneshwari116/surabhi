@@ -11,6 +11,7 @@ import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/utils/bill_gst_totals.dart';
 
 /// One-time import of legacy sales rows (surabhi_old_sales_import2.pdf).
 class OldSalesImportReport {
@@ -261,21 +262,7 @@ class OldSalesImportService {
     required String paymentMode,
     required List<BillItem> items,
   }) {
-    var totalQty = 0.0;
-    var totalAmount = 0.0;
-    var totalCgst = 0.0;
-    var totalSgst = 0.0;
-    var totalIgst = 0.0;
-    var grandTotal = 0.0;
-
-    for (final item in items) {
-      totalQty += item.qty;
-      totalAmount += item.amount;
-      totalCgst += item.cgst;
-      totalSgst += item.sgst;
-      totalIgst += item.igst;
-      grandTotal += item.grossAmt;
-    }
+    final totals = computeBillGstTotalsFromItems(items);
 
     return SaleBill(
       billNo: billNo,
@@ -285,12 +272,12 @@ class OldSalesImportService {
       customerName: '',
       mobile: '',
       items: items,
-      totalQty: totalQty,
-      totalAmount: totalAmount,
-      totalCgst: totalCgst,
-      totalSgst: totalSgst,
-      totalIgst: totalIgst,
-      grandTotal: grandTotal,
+      totalQty: totals.totalQty,
+      totalAmount: totals.totalAmount,
+      totalCgst: totals.totalCgst,
+      totalSgst: totals.totalSgst,
+      totalIgst: totals.totalIgst,
+      grandTotal: totals.grandTotal,
     );
   }
 

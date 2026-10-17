@@ -13,6 +13,7 @@ import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/schema_migrations.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/utils/bill_gst_totals.dart';
 
 /// Opens and reads per-location SQLite files used by admin views.
 class LocationDatabase {
@@ -384,29 +385,14 @@ class LocationDatabase {
   }
 
   static Map<String, double> _totalsFromItems(List<BillItem> items) {
-    var totalQty = 0.0;
-    var totalAmount = 0.0;
-    var totalCgst = 0.0;
-    var totalSgst = 0.0;
-    var totalIgst = 0.0;
-    var grandTotal = 0.0;
-
-    for (final item in items) {
-      totalQty += item.qty;
-      totalAmount += item.amount;
-      totalCgst += item.cgst;
-      totalSgst += item.sgst;
-      totalIgst += item.igst;
-      grandTotal += item.grossAmt;
-    }
-
+    final totals = computeBillGstTotalsFromItems(items);
     return {
-      'totalQty': totalQty,
-      'totalAmount': totalAmount,
-      'totalCgst': totalCgst,
-      'totalSgst': totalSgst,
-      'totalIgst': totalIgst,
-      'grandTotal': grandTotal,
+      'totalQty': totals.totalQty,
+      'totalAmount': totals.totalAmount,
+      'totalCgst': totals.totalCgst,
+      'totalSgst': totals.totalSgst,
+      'totalIgst': totals.totalIgst,
+      'grandTotal': totals.grandTotal,
     };
   }
 
