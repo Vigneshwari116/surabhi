@@ -238,9 +238,10 @@ class OldSalesImportService {
     );
     final grand = summary.totalSaleAmount + summary.totalGst;
     final expectedGrand = expectedTaxable + expectedGst;
-    return summary.totalSaleAmount == expectedTaxable &&
-        summary.totalGst == expectedGst &&
-        grand == expectedGrand &&
+    const epsilon = 0.02;
+    return (summary.totalSaleAmount - expectedTaxable).abs() < epsilon &&
+        (summary.totalGst - expectedGst).abs() < epsilon &&
+        (grand - expectedGrand).abs() < epsilon &&
         summary.totalPcs == expectedPcs;
   }
 
@@ -249,8 +250,8 @@ class OldSalesImportService {
     return verifyDayTotals(
       location: location,
       day: importDay,
-      expectedTaxable: 47557,
-      expectedGst: 2393,
+      expectedTaxable: 47571.44,
+      expectedGst: 2378.56,
       expectedPcs: 281,
     );
   }

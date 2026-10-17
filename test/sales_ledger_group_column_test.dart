@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/sales_ledger_screen.dart';
 import 'package:surabhi/utils/ledger_group_display.dart';

@@ -10,7 +10,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/config/location_codes.dart';
-import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 
@@ -46,6 +46,7 @@ void main() {
   tearDown(() async {
     SharedPreferences.setMockInitialValues({});
     await AppConfig.clearLocation();
+    await LocalDb.resetForTesting();
     final file = File(join(tempDir.path, SalesDatabase.salesDbFileName));
     if (await file.exists()) {
       await file.delete();
@@ -53,21 +54,17 @@ void main() {
   });
 
   test('bill detail seed is a no-op without bundled CSV import', () async {
+    await AppConfig.setLocation('main');
+    await LocalDb.instance.initialize();
     await LocationSeedService.ensureLocationSeeded('main');
     await LocationBillDetailSeedService.ensureLocationSeeded('main');
 
-    final ledger = await LocationDatabase.getLedgerEntries(
-      location: displayNameForLocationCode('main'),
+    final ledger = await LocalDb.instance.getLedgerEntries(
+      displayNameForLocationCode('main'),
       from: '2026-01-17',
       to: '2026-01-17',
     );
 
     expect(ledger, isEmpty);
-
-    final hasDetail = await LocationDatabase.dayHasLineItemDetail(
-      location: displayNameForLocationCode('main'),
-      day: '2026-01-17',
-    );
-    expect(hasDetail, isFalse);
   });
 }

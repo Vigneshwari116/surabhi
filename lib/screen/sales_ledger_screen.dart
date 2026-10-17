@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/utils/ledger_group_display.dart';
 import 'package:surabhi/utils/qty_format.dart';
@@ -56,7 +55,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
   static const double _cellVPad = 4;
 
   bool _loading = true;
-  bool _pulling = false;
   bool _exportingPdf = false;
   List<LocalLedgerEntry> _entries = [];
   LedgerSummary? _summary;
@@ -68,9 +66,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
   void initState() {
     super.initState();
     _loadLedger();
-    if (widget.autoRefreshOnOpen) {
-      _pullInBackground();
-    }
   }
 
   @override
@@ -116,32 +111,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
       _summary = result.summary;
       _loading = false;
     });
-  }
-
-  Future<void> _pullInBackground({bool showFeedback = false}) async {
-    setState(() => _pulling = true);
-
-    final result = await SyncService.instance.pullAdminUpdates(
-      widget.location,
-      automatic: true,
-    );
-
-    if (!mounted) return;
-
-    setState(() => _pulling = false);
-    await _loadLedger();
-
-    if (!mounted || !showFeedback) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok
-              ? 'Pulled ${result.pulledCount} bill update(s) for ${widget.location}'
-              : 'Pull failed: ${result.error ?? "unknown error"}',
-        ),
-      ),
-    );
   }
 
   void _setToday() {
@@ -213,7 +182,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
         builder: (_) => LedgerBillDetailScreen(
           bill: bill,
           localId: entry.localId,
-          syncStatus: entry.syncStatus,
           readOnly: widget.readOnly && !widget.adminFullEdit,
           adminFullEdit: widget.adminFullEdit,
         ),
@@ -298,22 +266,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
               icon: const Icon(Icons.picture_as_pdf_outlined),
               tooltip: 'Save as PDF',
             ),
-          if (_pulling)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.navy,
-                  ),
-                ),
-              ),
-            ),
           IconButton(
-            onPressed: () => _pullInBackground(showFeedback: true),
+            onPressed: _loadLedger,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),

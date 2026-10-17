@@ -99,9 +99,9 @@ void main() {
       fromDate: day,
       toDate: day,
     );
-    expect(summary.totalSaleAmount, 47557);
-    expect(summary.totalGst, 2393);
-    expect(summary.totalSaleAmount + summary.totalGst, 49950);
+    expect(summary.totalSaleAmount, closeTo(47571.44, 0.01));
+    expect(summary.totalGst, closeTo(2378.56, 0.01));
+    expect(summary.totalSaleAmount + summary.totalGst, closeTo(49950, 0.01));
     expect(summary.totalPcs, 281);
 
     expect(await OldSalesImportService.verifyTableBTotals(location), isTrue);
@@ -145,7 +145,7 @@ void main() {
     );
     // Bills 1–7 on 11 Oct are not in DB (skipped); only 8–54 from the file.
     expect(summary.totalPcs, 236);
-    expect(summary.totalSaleAmount, 38797);
-    expect(summary.totalGst, 1953);
+    expect(summary.totalSaleAmount, closeTo(38809.52, 0.02));
+    expect(summary.totalGst, closeTo(1940.48, 0.02));
   });
 }

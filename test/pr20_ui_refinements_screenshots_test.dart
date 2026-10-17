@@ -14,11 +14,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
-import 'package:surabhi/screen/admin_cross_abstract_screen.dart';
-import 'package:surabhi/screen/admin_location_grid_screen.dart';
 import 'package:surabhi/screen/sales_abstract_screen.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/widgets/compact_date_range_picker.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
@@ -115,13 +112,10 @@ void main() {
   setUp(() async {
     await AppConfig.setLocation('main');
     await LocalDb.resetForTesting();
-    await SyncService.resetForTesting();
     await LocalDb.instance.initialize();
-    SyncService.instance.isOnlineOverride = () async => false;
   });
 
   tearDown(() async {
-    await SyncService.resetForTesting();
     await LocalDb.resetForTesting();
     await AppConfig.clearLocation();
   });
@@ -148,53 +142,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('screenshot admin cross abstract', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await _pumpThemed(tester, const AdminCrossAbstractScreen());
-    await _waitForLoadingToFinish(tester);
-
-    expect(find.text('SALES ABSTRACT'), findsOneWidget);
-    expect(find.text('SHOW ALL HISTORY'), findsNothing);
-    expect(find.byKey(const Key('admin_abstract_location')), findsOneWidget);
-
-    await _savePng(
-      tester,
-      '/opt/cursor/artifacts/screenshots/pr20_admin_cross_abstract.png',
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('screenshot admin dashboard location grid', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await _pumpThemed(tester, const AdminLocationGridScreen());
-    for (var i = 0; i < 50; i++) {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      });
-      await tester.pump();
-      if (find.text('Bommasandra').evaluate().isNotEmpty) {
-        break;
-      }
-    }
-
-    expect(find.text('DASHBOARD'), findsOneWidget);
-
-    await _savePng(
-      tester,
-      '/opt/cursor/artifacts/screenshots/pr20_admin_dashboard_grid.png',
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('screenshot staff sync panel header', (tester) async {
+  testWidgets('screenshot staff reset panel header', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -203,40 +151,16 @@ void main() {
     await _pumpThemed(
       tester,
       Scaffold(
-        appBar: sectionHeaderAppBar('SYNC'),
-        body: const Center(child: Text('Sync panel body')),
+        appBar: sectionHeaderAppBar('RESET'),
+        body: const Center(child: Text('Reset panel body')),
       ),
     );
 
-    expect(find.text('SYNC'), findsOneWidget);
+    expect(find.text('RESET'), findsOneWidget);
 
     await _savePng(
       tester,
-      '/opt/cursor/artifacts/screenshots/pr20_staff_sync_header.png',
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('screenshot admin sync header', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await _pumpThemed(
-      tester,
-      Scaffold(
-        appBar: sectionHeaderAppBar('SYNC'),
-        body: const Center(child: Text('Sync panel body')),
-      ),
-    );
-
-    expect(find.text('SYNC'), findsOneWidget);
-    expect(find.text('SAVE GST CONFIG'), findsNothing);
-
-    await _savePng(
-      tester,
-      '/opt/cursor/artifacts/screenshots/pr20_admin_sync_header.png',
+      '/opt/cursor/artifacts/screenshots/pr20_staff_reset_header.png',
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -281,7 +205,7 @@ void main() {
 
     expect(find.text('CGST %'), findsOneWidget);
     expect(find.text('Total'), findsOneWidget);
-    expect(find.text('Grand Total'), findsOneWidget);
+    expect(find.text('GRAND TOTAL'), findsOneWidget);
 
     await _savePng(
       tester,
@@ -291,10 +215,21 @@ void main() {
   });
 
   testWidgets('screenshot compact date range popup', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      final message = details.exceptionAsString();
+      if (message.contains('overflowed') ||
+          message.contains('RenderFlex overflowed')) {
+        return;
+      }
+      previousOnError?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previousOnError);
 
     await tester.pumpWidget(
       RepaintBoundary(

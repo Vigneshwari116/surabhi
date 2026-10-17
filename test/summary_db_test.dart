@@ -6,7 +6,6 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/config/local_credentials.dart';
 import 'package:surabhi/db/summary_db.dart';
 
 class _FakePathProvider extends Fake
@@ -164,10 +163,4 @@ void main() {
     );
   });
 
-  test('summary viewer credentials are accepted', () {
-    expect(verifySummaryViewerLogin('SUMMARY', 'summary'), isTrue);
-    expect(verifySummaryViewerLogin('summary', 'summary'), isTrue);
-    expect(verifySummaryViewerLogin('SUMMARY', 'wrong'), isFalse);
-    expect(verifySummaryViewerLogin('admin', 'admin123'), isFalse);
-  });
 }

@@ -7,11 +7,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/app_license.dart';
-import 'package:surabhi/screen/admin_dashboard_screen.dart';
 import 'package:surabhi/screen/app_expired_screen.dart';
 import 'package:surabhi/screen/login_screen.dart';
 import 'package:surabhi/screen/staff_dashboard_screen.dart';
-import 'package:surabhi/screen/summary_viewer_dashboard_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
@@ -67,16 +65,9 @@ class _AppRootState extends State<AppRoot> {
 
     if (loggedIn && AppConfig.isLocationSet) {
       final role = await SessionService.getRole();
-      unawaited(AppSessionService.onLoginComplete());
-
-      if (role == SessionRole.admin) {
-        return const AdminDashboardScreen();
-      }
       if (role == SessionRole.staff) {
+        unawaited(AppSessionService.onLoginComplete());
         return const StaffDashboardScreen();
-      }
-      if (role == SessionRole.summaryViewer) {
-        return const SummaryViewerDashboardScreen();
       }
     }
 

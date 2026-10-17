@@ -15,13 +15,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/screen/admin_location_grid_screen.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/staff_sales_dashboard_screen.dart';
 import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/services/location_reset_service.dart';
 import 'package:surabhi/services/receipt_service.dart';
-import 'package:surabhi/services/sync_gate_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 
 class _FakePathProvider extends Fake
@@ -102,13 +100,10 @@ void main() {
   setUp(() async {
     await AppConfig.setLocation('main');
     await LocalDb.resetForTesting();
-    await SyncService.resetForTesting();
     await LocalDb.instance.initialize();
-    SyncService.instance.isOnlineOverride = () async => false;
   });
 
   tearDown(() async {
-    await SyncService.resetForTesting();
     await LocalDb.resetForTesting();
     await AppConfig.clearLocation();
   });
@@ -131,22 +126,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('screenshot admin location grid branding', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await _pumpThemed(tester, const AdminLocationGridScreen());
-    await _waitForLoadingToFinish(tester);
-
-    expect(find.text('SURABHI EXPORT'), findsWidgets);
-
-    await _savePng(tester, '$shotDir/branding_admin_location_grid.png');
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('screenshot staff sync panel with reset button', (tester) async {
+  testWidgets('screenshot staff reset panel with reset button', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -155,7 +135,7 @@ void main() {
     await _pumpThemed(
       tester,
       Scaffold(
-        appBar: AppBar(title: const Text('SYNC')),
+        appBar: AppBar(title: const Text('RESET')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
@@ -165,17 +145,6 @@ void main() {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      height: 46,
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        key: const Key('staff_sync_now_button'),
-                        onPressed: () {},
-                        icon: const Icon(Icons.cloud_upload_outlined),
-                        label: const Text('SYNC NOW'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     SizedBox(
                       height: 46,
                       width: double.infinity,
@@ -197,7 +166,7 @@ void main() {
 
     expect(find.byKey(const Key('staff_reset_button')), findsOneWidget);
 
-    await _savePng(tester, '$shotDir/branding_staff_sync_reset_button.png');
+    await _savePng(tester, '$shotDir/branding_staff_reset_button.png');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -216,7 +185,7 @@ void main() {
             body: Center(
               child: ElevatedButton(
                 onPressed: () async {
-                  await SyncGateService.confirmReset(context);
+                  await LocationResetService.confirmReset(context);
                 },
                 child: const Text('Open reset flow'),
               ),
@@ -232,7 +201,7 @@ void main() {
 
     await _savePng(tester, '$shotDir/reset_flow_password_dialog.png');
 
-    await tester.enterText(find.byType(TextField), 'RKS');
+    await tester.enterText(find.byType(TextField), 'SURABHI');
     await tester.tap(find.text('CONTINUE'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -241,7 +210,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('screenshot offline queued reset success message', (tester) async {
+  testWidgets('screenshot local reset success message', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -250,7 +219,7 @@ void main() {
     await _pumpThemed(
       tester,
       Scaffold(
-        appBar: AppBar(title: const Text('SYNC')),
+        appBar: AppBar(title: const Text('RESET')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
@@ -258,7 +227,7 @@ void main() {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Local sales data cleared. Server reset queued for next sync.',
+                  'Local sales data cleared for Surabhi. Next bill will be #1.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -273,7 +242,7 @@ void main() {
       ),
     );
 
-    await _savePng(tester, '$shotDir/reset_offline_queued_message.png');
+    await _savePng(tester, '$shotDir/reset_local_success_message.png');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

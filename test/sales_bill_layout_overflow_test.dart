@@ -14,7 +14,6 @@ import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/utils/money_format.dart';
 
 class _FakePathProvider extends Fake
@@ -61,15 +60,12 @@ void main() {
     await AppConfig.setLocation(_testLocationCode);
     await SessionService.clearBillSession();
     await LocalDb.resetForTesting();
-    await SyncService.resetForTesting();
     await _deleteTestDb();
     await LocalDb.instance.initialize();
     await LocalDb.instance.getNextBillNumber(AppConfig.displayLocationName);
-    SyncService.instance.start(location: AppConfig.displayLocationName);
   });
 
   tearDown(() async {
-    await SyncService.resetForTesting();
     await LocalDb.resetForTesting();
     await _deleteTestDb();
     await AppConfig.clearLocation();
@@ -200,7 +196,6 @@ void main() {
     expect(find.byIcon(Icons.close), findsNWidgets(3));
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -228,7 +223,6 @@ void main() {
     expect(find.byKey(const Key('today_sales_panel')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -244,7 +238,6 @@ void main() {
     expect(maxVerticalListScrollExtent(tester), 0);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -264,7 +257,6 @@ void main() {
     expect(maxVerticalListScrollExtent(tester), 0);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -286,7 +278,6 @@ void main() {
     expect(find.text('11'), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -302,7 +293,6 @@ void main() {
     expect(find.text(formatMoneyAmount(7067)), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -318,7 +308,6 @@ void main() {
     expect(find.text(formatMoneyAmount(1234567)), findsWidgets);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -335,7 +324,6 @@ void main() {
     expect(textFontSize(tester, find.text('AA')), 10);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });
@@ -350,7 +338,6 @@ void main() {
     expectRow10AboveHorizontalScrollbar(tester);
     expect(tester.takeException(), isNull);
 
-    await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
   });

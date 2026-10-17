@@ -37,7 +37,6 @@ void main() {
         home: LedgerBillDetailScreen(
           bill: bill,
           localId: 'detail-test-id',
-          syncStatus: 'synced',
         ),
       ),
     );
@@ -46,7 +45,8 @@ void main() {
     expect(find.text('Detail Test Customer'), findsOneWidget);
     expect(find.text('9876543210'), findsOneWidget);
     expect(find.text('CASH'), findsOneWidget);
-    expect(find.text('Synced'), findsOneWidget);
+    expect(find.text('Synced'), findsNothing);
+    expect(find.text('Pending sync'), findsNothing);
     expect(find.text('Location: Surabhi'), findsOneWidget);
 
     expect(find.text('1'), findsWidgets);
@@ -62,7 +62,6 @@ void main() {
         home: LedgerBillDetailScreen(
           bill: bill,
           localId: 'detail-test-id',
-          syncStatus: 'synced',
         ),
       ),
     );
@@ -100,7 +99,6 @@ void main() {
         home: LedgerBillDetailScreen(
           bill: bill,
           localId: 'empty-bill-id',
-          syncStatus: 'pending',
         ),
       ),
     );
@@ -109,7 +107,7 @@ void main() {
       find.text('This bill has no line items stored locally.'),
       findsOneWidget,
     );
-    expect(find.text('Pending sync'), findsOneWidget);
+    expect(find.text('Pending sync'), findsNothing);
   });
 
   testWidgets('back button pops bill detail screen', (tester) async {
@@ -126,7 +124,6 @@ void main() {
                     builder: (_) => LedgerBillDetailScreen(
                       bill: bill,
                       localId: 'detail-test-id',
-                      syncStatus: 'synced',
                     ),
                   ),
                 );
@@ -143,10 +140,9 @@ void main() {
 
     expect(find.byType(LedgerBillDetailScreen), findsOneWidget);
 
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
 
     expect(find.byType(LedgerBillDetailScreen), findsNothing);
-    expect(find.text('Open'), findsOneWidget);
   });
 }

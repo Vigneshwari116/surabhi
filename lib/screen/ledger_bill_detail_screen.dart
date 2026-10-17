@@ -15,7 +15,6 @@ import 'package:surabhi/widgets/compact_layout.dart';
 class LedgerBillDetailScreen extends StatefulWidget {
   final SaleBill bill;
   final String localId;
-  final String? syncStatus;
   final bool readOnly;
   final bool adminFullEdit;
 
@@ -23,7 +22,6 @@ class LedgerBillDetailScreen extends StatefulWidget {
     super.key,
     required this.bill,
     required this.localId,
-    this.syncStatus,
     this.readOnly = false,
     this.adminFullEdit = false,
   });
@@ -298,38 +296,11 @@ class _LedgerBillDetailScreenState extends State<LedgerBillDetailScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Text(
-                'Location: ${_bill.location}',
-                style: const TextStyle(fontSize: 10),
-              ),
-              if (widget.syncStatus != null) ...[
-                const Spacer(),
-                _syncBadge(widget.syncStatus!),
-              ],
-            ],
+          Text(
+            'Location: ${_bill.location}',
+            style: const TextStyle(fontSize: 10),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _syncBadge(String status) {
-    final isPending = status == 'pending';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isPending ? AppColors.warningBg : AppColors.successBg,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        isPending ? 'Pending sync' : 'Synced',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: isPending ? AppColors.warningFg : AppColors.success,
-        ),
       ),
     );
   }

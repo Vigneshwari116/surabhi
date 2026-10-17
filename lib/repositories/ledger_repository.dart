@@ -1,13 +1,10 @@
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
-import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/db/local_db.dart' as db;
-import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/models/ledger_summary.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/location_bill_detail_seed_service.dart';
 import 'package:surabhi/services/location_seed_service.dart';
 import 'package:surabhi/services/summary_update_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 
 class LocalLedgerEntry {
   final String localId;
@@ -53,11 +50,16 @@ class LedgerRepository {
     String? to,
   }) async {
     try {
-      final locationCode = locationCodeFromDisplayName(location);
-      await LocationSeedService.ensureLocationSeeded(locationCode);
-      await LocationBillDetailSeedService.ensureLocationSeeded(locationCode);
-      final rows = await LocationDatabase.getLedgerEntries(
-        location: location,
+      if (AppConfig.isLocationSet) {
+        await db.LocalDb.instance.initialize();
+        await LocationSeedService.ensureLocationSeeded(AppConfig.locationCode);
+        await LocationBillDetailSeedService.ensureLocationSeeded(
+          AppConfig.locationCode,
+        );
+      }
+
+      final rows = await db.LocalDb.instance.getLedgerEntries(
+        location,
         from: from,
         to: to,
       );
@@ -107,23 +109,16 @@ class LedgerRepository {
     required String location,
     required String localId,
   }) async {
-    if (AppConfig.isLocationSet) {
-      try {
-        await db.LocalDb.instance.initialize();
-        final fromActiveDb = await db.LocalDb.instance.getBillByLocalId(localId);
-        if (fromActiveDb != null) {
-          return fromActiveDb;
-        }
-      } catch (_) {
-        // Fall through to per-location file read.
+    try {
+      await db.LocalDb.instance.initialize();
+      final fromActiveDb = await db.LocalDb.instance.getBillByLocalId(localId);
+      if (fromActiveDb != null) {
+        return fromActiveDb;
       }
+    } catch (_) {
+      // Best-effort read.
     }
-
-    final locationCode = locationCodeFromDisplayName(location);
-    return LocationDatabase.getBillByLocalId(
-      locationCode: locationCode,
-      localId: localId,
-    );
+    return null;
   }
 
   static Future<void> softDeleteBill(String localId) async {
@@ -132,10 +127,6 @@ class LedgerRepository {
     if (bill != null) {
       await SummaryUpdateService.onBillDeleted(bill);
     }
-  }
-
-  static Future<void> refreshFromServer({required String location}) async {
-    await SyncService.instance.pullAdminUpdates(location);
   }
 
   static LedgerSummary _buildSummary(List<LocalLedgerEntry> entries) {

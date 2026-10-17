@@ -28,7 +28,6 @@ import 'login_screen.dart';
 import 'sales_ledger_screen.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/gst_config_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/services/print_log_service.dart';
 import 'package:surabhi/utils/bill_gst_totals.dart';
@@ -150,7 +149,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   bool _billSaved = false;
 
   bool _busy = false;
-  bool _manualPushInProgress = false;
   String? _currentBillLocalId;
   String? _rateError;
   String? _qtyError;
@@ -302,8 +300,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _gridVScrollController.addListener(_syncDeleteScrollFromGrid);
     _gridDeleteVScrollController.addListener(_syncGridScrollFromDelete);
 
-    _manualPushInProgress = SyncService.instance.manualPushInProgress.value;
-    SyncService.instance.manualPushInProgress.addListener(_onManualPushChanged);
 
     _loadGstRates();
 
@@ -461,15 +457,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     _mobileFocus.requestFocus();
   }
 
-  void _onManualPushChanged() {
-    if (!mounted) return;
-    setState(() {
-      _manualPushInProgress =
-          SyncService.instance.manualPushInProgress.value;
-    });
-  }
-
-  bool get _isEntryLocked => _busy || _manualPushInProgress;
+  bool get _isEntryLocked => _busy;
 
   Future<void> _loadGstRates() async {
     final cgst = await GstConfigService.cgstPct();
@@ -479,15 +467,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       _cgstPct = cgst;
       _sgstPct = sgst;
     });
-  }
-
-  Future<void> _syncNow() async {
-    final result =
-        await SyncService.instance.manualPush(_selectedLocation);
-
-    if (!mounted) return;
-
-    _showMessage(result.summaryMessage);
   }
 
   Future<void> _refreshBillNumberFromDatabase() async {
@@ -1464,27 +1443,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           absorbing: _isEntryLocked,
           child: child,
         ),
-        if (_manualPushInProgress)
-          Positioned.fill(
-            child: ColoredBox(
-              color: Color(0x33000000),
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 12),
-                        Text('Syncing bills to server...'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -1972,17 +1930,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 onClose();
                 _openLedger();
               },
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_upload_outlined),
-              title: const Text('SYNC NOW'),
-              enabled: !_manualPushInProgress,
-              onTap: _manualPushInProgress
-                  ? null
-                  : () {
-                      onClose();
-                      _syncNow();
-                    },
             ),
             const Spacer(),
             ListTile(
@@ -3540,8 +3487,6 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   @override
   void dispose() {
-    SyncService.instance.manualPushInProgress
-        .removeListener(_onManualPushChanged);
     _persistSession();
 
     _customerNameController.dispose();

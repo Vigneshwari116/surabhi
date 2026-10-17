@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/local_credentials.dart';
-import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/screen/login_screen.dart';
 import 'package:surabhi/screen/sales_abstract_screen.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
@@ -11,8 +10,6 @@ import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
 import 'package:surabhi/services/location_reset_service.dart';
 import 'package:surabhi/services/session_service.dart';
-import 'package:surabhi/services/sync_gate_service.dart';
-import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/widgets/collapsible_sidebar.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
@@ -23,7 +20,7 @@ enum _StaffSection {
   abstract,
   ledger,
   printer,
-  sync,
+  reset,
 }
 
 /// Staff shell with collapsible navy sidebar (icon-only or icon + label row).
@@ -89,8 +86,8 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
         return 'LEDGER';
       case _StaffSection.printer:
         return 'PRINTER';
-      case _StaffSection.sync:
-        return 'SYNC';
+      case _StaffSection.reset:
+        return 'RESET';
     }
   }
 
@@ -106,8 +103,8 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
         return Icons.menu_book_outlined;
       case _StaffSection.printer:
         return Icons.print_outlined;
-      case _StaffSection.sync:
-        return Icons.cloud_upload_outlined;
+      case _StaffSection.reset:
+        return Icons.delete_forever_outlined;
     }
   }
 
@@ -135,17 +132,14 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
               refreshGeneration: _refreshGeneration,
             ),
         const StaffThermalPrinterScreen(),
-        const _StaffSyncPanel(),
+        const _StaffResetPanel(),
       ],
     );
   }
 
   List<SidebarNavItem> _navItems() {
-    final sections = _StaffSection.values
-        .where((s) => !AppConfig.offlineOnly || s != _StaffSection.sync)
-        .toList(growable: false);
     return [
-      for (final section in sections)
+      for (final section in _StaffSection.values)
         SidebarNavItem(
           key: Key('staff_nav_${section.name}'),
           icon: _sectionIcon(section),
@@ -200,50 +194,26 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
   }
 }
 
-class _StaffSyncPanel extends StatefulWidget {
-  const _StaffSyncPanel();
+class _StaffResetPanel extends StatefulWidget {
+  const _StaffResetPanel();
 
   @override
-  State<_StaffSyncPanel> createState() => _StaffSyncPanelState();
+  State<_StaffResetPanel> createState() => _StaffResetPanelState();
 }
 
-class _StaffSyncPanelState extends State<_StaffSyncPanel> {
-  bool _syncing = false;
+class _StaffResetPanelState extends State<_StaffResetPanel> {
   bool _resetting = false;
   String? _message;
-  bool? _lastSyncOk;
-
-  Future<void> _syncNow() async {
-    final allowed = await SyncGateService.confirmSync(context);
-    if (!allowed || !mounted) return;
-
-    setState(() {
-      _syncing = true;
-      _message = null;
-      _lastSyncOk = null;
-    });
-
-    final result = await SyncService.instance.manualSync(
-      AppConfig.displayLocationName,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _syncing = false;
-      _message = result.summaryMessage;
-      _lastSyncOk = result.ok;
-    });
-  }
+  bool? _lastOk;
 
   Future<void> _resetLocation() async {
-    final allowed = await SyncGateService.confirmReset(context);
+    final allowed = await LocationResetService.confirmReset(context);
     if (!allowed || !mounted) return;
 
     setState(() {
       _resetting = true;
       _message = null;
-      _lastSyncOk = null;
+      _lastOk = null;
     });
 
     final result = await LocationResetService.resetCurrentLocation(
@@ -255,24 +225,14 @@ class _StaffSyncPanelState extends State<_StaffSyncPanel> {
 
     setState(() {
       _resetting = false;
-      _lastSyncOk = result.ok;
+      _lastOk = result.ok;
       if (!result.ok) {
         _message = result.error ?? 'Reset failed';
         return;
       }
-
-      if (result.serverResetQueued) {
-        _message =
-            '${LocationResetService.resetWipesLocalAndServerMessage} '
-            'Local data cleared. Server wipe queued — run SYNC when online.';
-      } else if (result.serverCleared) {
-        _message =
-            'Local and server sales data cleared. Next bill will be #1.';
-      } else {
-        _message =
-            '${LocationResetService.resetWipesLocalAndServerMessage} '
-            'Local data cleared. Next bill will be #1.';
-      }
+      _message =
+          'Local sales data cleared for ${AppConfig.displayLocationName}. '
+          'Next bill will be #1.';
     });
   }
 
@@ -281,7 +241,7 @@ class _StaffSyncPanelState extends State<_StaffSyncPanel> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: sectionHeaderAppBar(
-        'SYNC',
+        'RESET',
       ),
       body: Center(
         child: ConstrainedBox(
@@ -293,39 +253,17 @@ class _StaffSyncPanelState extends State<_StaffSyncPanel> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Push pending bills and pull admin updates. '
-                    'If you reset while offline, run SYNC when back online '
-                    'before creating new bills.',
+                  Text(
+                    LocationResetService.resetLocalOnlyMessage,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: AppTextSizes.fieldText),
+                    style: const TextStyle(fontSize: AppTextSizes.fieldText),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
                     height: 46,
-                    child: ElevatedButton.icon(
-                      key: const Key('staff_sync_now_button'),
-                      onPressed: (_syncing || _resetting) ? null : _syncNow,
-                      icon: _syncing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.cloud_upload_outlined),
-                      label: Text(_syncing ? 'SYNCING...' : 'SYNC NOW'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.navy,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 46,
                     child: OutlinedButton.icon(
                       key: const Key('staff_reset_button'),
-                      onPressed: (_syncing || _resetting) ? null : _resetLocation,
+                      onPressed: _resetting ? null : _resetLocation,
                       icon: _resetting
                           ? const SizedBox(
                               width: 18,
@@ -348,7 +286,7 @@ class _StaffSyncPanelState extends State<_StaffSyncPanel> {
                       style: TextStyle(
                         fontSize: AppTextSizes.sectionHeader,
                         fontWeight: FontWeight.w600,
-                        color: _lastSyncOk == false
+                        color: _lastOk == false
                             ? AppColors.danger
                             : AppColors.success,
                       ),

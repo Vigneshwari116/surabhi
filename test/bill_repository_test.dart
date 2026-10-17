@@ -7,11 +7,11 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/db/summary_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
+import 'package:surabhi/models/save_bill_result.dart';
 import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/repositories/ledger_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -64,31 +64,21 @@ void main() {
   });
 
   tearDown(() async {
-    BillRepository.saveBillApiOverride = null;
-    AppConfig.useServerApiOverride = null;
     await SummaryDb.resetForTesting();
     await LocalDb.resetForTesting();
     await AppConfig.clearLocation();
   });
 
-  test('save finishes under 1s without calling API when useServerApi is false',
+  test('save finishes under 1s and writes local bill, ledger, and summary',
       () async {
-    var apiInvoked = false;
-    BillRepository.saveBillApiOverride = (_) async {
-      apiInvoked = true;
-      await Future<void>.delayed(const Duration(seconds: 30));
-      return SalesApiResult.success(999);
-    };
-
     final bill = _sampleBill(billNo: 42, rate: 200);
     final stopwatch = Stopwatch()..start();
     final result = await BillRepository.saveBill(bill);
     stopwatch.stop();
 
     expect(stopwatch.elapsedMilliseconds, lessThan(1000));
-    expect(apiInvoked, isFalse);
     expect(result.ok, isTrue);
-    expect(result.data, 42);
+    expect(result.billNo, 42);
 
     final stored = await LocalDb.instance.getBillByNumber(
       location: 'Surabhi',
@@ -96,6 +86,7 @@ void main() {
     );
     expect(stored, isNotNull);
     expect(stored!.bill.grandTotal, bill.grandTotal);
+    expect(stored.syncStatus, kLocalBillSyncStatus);
 
     await SummaryDb.instance.initialize();
     final dayRows = await SummaryDb.instance.getDayTotalsForMonth(
@@ -123,7 +114,7 @@ void main() {
     final result = await BillRepository.saveBill(updated);
 
     expect(result.ok, isTrue);
-    expect(result.data, 2);
+    expect(result.billNo, 2);
 
     final stored = await LocalDb.instance.getBillByNumber(
       location: 'Surabhi',

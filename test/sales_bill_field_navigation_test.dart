@@ -8,7 +8,6 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/local_credentials.dart';
 import 'package:surabhi/db/local_db.dart';
@@ -16,8 +15,6 @@ import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
-import 'package:surabhi/services/sync_service.dart';
-
 class _FakePathProvider extends Fake
     with MockPlatformInterfaceMixin
     implements PathProviderPlatform {
@@ -62,18 +59,12 @@ void main() {
     await AppConfig.setLocation(_testLocationCode);
     await SessionService.clearBillSession();
     await LocalDb.resetForTesting();
-    await SyncService.resetForTesting();
     await _deleteTestDb();
     await LocalDb.instance.initialize();
     await LocalDb.instance.getNextBillNumber(AppConfig.displayLocationName);
-    SyncService.instance.start(location: AppConfig.displayLocationName);
-    BillRepository.saveBillApiOverride =
-        (bill) async => SalesApiResult.success(bill.billNo);
   });
 
   tearDown(() async {
-    BillRepository.saveBillApiOverride = null;
-    await SyncService.resetForTesting();
     await LocalDb.resetForTesting();
     await _deleteTestDb();
     await AppConfig.clearLocation();

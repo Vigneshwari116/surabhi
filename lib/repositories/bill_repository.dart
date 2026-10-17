@@ -1,18 +1,10 @@
-import 'package:flutter/foundation.dart';
-import 'package:surabhi/api/sales_api.dart';
-import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
-import 'package:surabhi/services/daily_total_service.dart';
+import 'package:surabhi/models/save_bill_result.dart';
 import 'package:surabhi/services/print_log_service.dart';
 import 'package:surabhi/services/summary_update_service.dart';
 
 class BillRepository {
-  /// When set (tests only), replaces [SalesApi.saveBill] for faster, offline saves.
-  @visibleForTesting
-  static Future<SalesApiResult<int>> Function(SaleBill bill)?
-      saveBillApiOverride;
-
   static Future<int> getNextBillNumber(String location) async {
     return LocalDb.instance.getNextBillNumber(location);
   }
@@ -50,24 +42,12 @@ class BillRepository {
     return stored?.bill;
   }
 
-  static Future<SalesApiResult<int>> saveBill(
+  static Future<SaveBillResult> saveBill(
     SaleBill bill, {
     String? updateLocalId,
   }) async {
     final timings = SaveStepTimings(billNo: bill.billNo, scope: 'repository');
     await PrintLogService.append('save repository start billNo=${bill.billNo}');
-
-    final SalesApiResult<int> apiResult;
-    if (AppConfig.useServerApiEnabled) {
-      final saveApi = saveBillApiOverride ?? SalesApi.saveBill;
-      apiResult = await timings.timeAsync('save_api', () => saveApi(bill));
-    } else {
-      await PrintLogService.append(
-        'save scope=repository billNo=${bill.billNo} step=save_api skipped (useServerApi=false) 0ms',
-      );
-      apiResult = SalesApiResult.failure('local-only');
-    }
-    final syncStatus = apiResult.ok ? 'synced' : 'pending';
 
     SaleBill? previous;
     try {
@@ -114,7 +94,7 @@ class BillRepository {
         () => LocalDb.instance.persistBill(
           billToSave,
           updateLocalId: updateLocalId,
-          syncStatus: syncStatus,
+          syncStatus: kLocalBillSyncStatus,
         ),
       );
 
@@ -126,18 +106,11 @@ class BillRepository {
         ),
       );
 
-      await timings.timeAsync('daily_total', () async {
-        DailyTotalService.pushBillDelta(current: billToSave, previous: previous);
-      });
-
       await timings.finish();
-      return SalesApiResult.success(billToSave.billNo);
+      return SaveBillResult.success(billToSave.billNo);
     } catch (_) {
       await timings.finish();
-      if (apiResult.ok) {
-        return apiResult;
-      }
-      return SalesApiResult.failure('Could not save bill locally.');
+      return SaveBillResult.failure('Could not save bill locally.');
     }
   }
 }

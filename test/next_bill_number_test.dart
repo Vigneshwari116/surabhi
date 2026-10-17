@@ -7,7 +7,6 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:surabhi/api/sales_api.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
@@ -61,12 +60,9 @@ void main() {
     await AppConfig.setLocation('main');
     await LocalDb.resetForTesting();
     await LocalDb.instance.initialize();
-    BillRepository.saveBillApiOverride =
-        (bill) async => SalesApiResult.success(bill.billNo);
   });
 
   tearDown(() async {
-    BillRepository.saveBillApiOverride = null;
     await LocalDb.resetForTesting();
     await AppConfig.clearLocation();
   });
@@ -87,7 +83,7 @@ void main() {
     final newBill = _minimalBill(billNo: 1, location: location);
     final result = await BillRepository.saveBill(newBill);
     expect(result.ok, isTrue);
-    expect(result.data, 8);
+    expect(result.billNo, 8);
 
     expect(await BillRepository.getNextBillNumber(location), 9);
   });

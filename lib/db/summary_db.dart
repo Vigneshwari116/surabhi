@@ -6,8 +6,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:surabhi/config/location_codes.dart';
-import 'package:surabhi/db/location_database.dart';
+import 'package:surabhi/config/sales_database.dart';
 import 'package:surabhi/db/schema_migrations.dart';
+
+Future<String> _salesDbPathForLocationCode(String locationCode) async {
+  SalesDatabase.normalizeLocationCode(locationCode);
+  return SalesDatabase.salesDbPath();
+}
 
 class DaySummaryRow {
   final String location;
@@ -199,7 +204,7 @@ class SummaryDb {
 
     await db.transaction((txn) async {
       for (final code in allLocationCodes) {
-        final path = await LocationDatabase.dbPathForLocationCode(code);
+        final path = await _salesDbPathForLocationCode(code);
         if (await File(path).exists()) {
           anyLocationDbExists = true;
         }
@@ -236,7 +241,7 @@ class SummaryDb {
     double grandTotal,
     double totalPcs,
   })>> _readBillTotalsFromLocationFile(String locationCode) async {
-    final path = await LocationDatabase.dbPathForLocationCode(locationCode);
+    final path = await _salesDbPathForLocationCode(locationCode);
     if (!await File(path).exists()) {
       return const [];
     }
@@ -531,7 +536,7 @@ class SummaryDb {
     String location,
   ) async {
     final code = locationCodeFromDisplayName(location);
-    final path = await LocationDatabase.dbPathForLocationCode(code);
+    final path = await _salesDbPathForLocationCode(code);
     if (!await File(path).exists()) {
       return {};
     }
