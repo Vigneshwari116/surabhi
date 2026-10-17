@@ -43,7 +43,7 @@ void main() {
     final bytes = EscPosReceiptService.buildReceiptBytesFromText(text);
     final payload = String.fromCharCodes(bytes);
 
-    expect(payload, contains('SURABHI EXPORTS'));
+    expect(payload, contains('SURABHI EXPORT'));
     expect(payload, contains('THARGUPET'));
     expect(payload, contains('BILL NO:17367'));
     expect(payload, contains('GRAND TOTAL'));

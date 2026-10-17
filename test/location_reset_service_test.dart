@@ -16,8 +16,8 @@ void main() {
     expect(allLocationCodes, ['main']);
   });
 
-  test('branch label maps to Surabhi Exports', () {
-    expect(branchLabelForLocationCode('main'), 'Surabhi Exports');
+  test('branch label maps to Surabhi Export', () {
+    expect(branchLabelForLocationCode('main'), 'Surabhi Export');
   });
 
   test('hasPendingServerReset tracks queued location codes', () async {

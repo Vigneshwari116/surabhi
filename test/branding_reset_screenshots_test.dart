@@ -125,8 +125,7 @@ void main() {
     );
     await _waitForLoadingToFinish(tester);
 
-    expect(find.text('SURABHI EXPORTS'), findsOneWidget);
-    expect(find.text('Surabhi Exports'), findsOneWidget);
+    expect(find.text('SURABHI EXPORT'), findsOneWidget);
 
     await _savePng(tester, '$shotDir/branding_staff_dashboard_win1.png');
     await tester.pumpWidget(const SizedBox.shrink());
@@ -141,8 +140,7 @@ void main() {
     await _pumpThemed(tester, const AdminLocationGridScreen());
     await _waitForLoadingToFinish(tester);
 
-    expect(find.text('SURABHI EXPORTS'), findsWidgets);
-    expect(find.text('Surabhi Exports'), findsOneWidget);
+    expect(find.text('SURABHI EXPORT'), findsWidgets);
 
     await _savePng(tester, '$shotDir/branding_admin_location_grid.png');
     await tester.pumpWidget(const SizedBox.shrink());

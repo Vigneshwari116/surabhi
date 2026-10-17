@@ -100,6 +100,20 @@ void main() {
     );
   });
 
+  test('clears stored virtual printer name on read', () async {
+    SharedPreferences.setMockInitialValues({
+      'default_printer_thermal': 'Microsoft Print to PDF',
+    });
+
+    expect(
+      await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal),
+      isNull,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('default_printer_thermal'), isFalse);
+  });
+
   test('migration does not overwrite existing thermal default', () async {
     SharedPreferences.setMockInitialValues({
       PrinterSettingsService.legacyDefaultPrinterKey: 'legacy-printer',

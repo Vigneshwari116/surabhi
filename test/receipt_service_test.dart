@@ -36,11 +36,11 @@ SaleBill _sampleBill() {
 }
 
 void main() {
-  test('header shows Surabhi Exports centered with address', () {
+  test('header shows Surabhi Export centered with address', () {
     final lines = ReceiptService.buildReceiptLines(_sampleBill());
     final text = lines.join('\n');
 
-    expect(text, contains('SURABHI EXPORTS'));
+    expect(text, contains('SURABHI EXPORT'));
     expect(text, contains('THARGUPET'));
     expect(text, contains('T.10, 3RD FLOOR'));
     expect(text, contains('29ACDPJ2452J1ZK'));
