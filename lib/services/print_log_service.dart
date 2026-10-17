@@ -31,3 +31,41 @@ class PrintLogService {
     }
   }
 }
+
+/// Per-save step timings written to [PrintLogService] (no customer data).
+class SaveStepTimings {
+  final int billNo;
+  final String scope;
+  final Map<String, int> _elapsedMs = {};
+
+  SaveStepTimings({required this.billNo, required this.scope});
+
+  Future<T> timeAsync<T>(String step, Future<T> Function() action) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      return await action();
+    } finally {
+      stopwatch.stop();
+      final ms = stopwatch.elapsedMilliseconds;
+      _elapsedMs[step] = ms;
+      await PrintLogService.append(
+        'save scope=$scope billNo=$billNo step=$step ${ms}ms',
+      );
+    }
+  }
+
+  Future<void> finish() async {
+    if (_elapsedMs.isEmpty) {
+      return;
+    }
+    var slowest = _elapsedMs.entries.first;
+    for (final entry in _elapsedMs.entries) {
+      if (entry.value > slowest.value) {
+        slowest = entry;
+      }
+    }
+    await PrintLogService.append(
+      'save scope=$scope billNo=$billNo slowest=${slowest.key} ${slowest.value}ms',
+    );
+  }
+}

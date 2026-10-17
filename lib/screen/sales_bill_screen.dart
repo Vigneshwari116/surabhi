@@ -1091,11 +1091,20 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     setState(() => _busy = true);
     developer.log('Save bill starting', name: 'SalesBill.print777');
 
+    final timings = SaveStepTimings(billNo: _billNo, scope: 'ui');
+    await PrintLogService.append('save ui start billNo=$_billNo');
+
     try {
-      final bill = _buildCurrentBill();
-      final result = await BillRepository.saveBill(
-        bill,
-        updateLocalId: _currentBillLocalId,
+      final bill = await timings.timeAsync(
+        'build_bill',
+        () async => _buildCurrentBill(),
+      );
+      final result = await timings.timeAsync(
+        'repository_save',
+        () => BillRepository.saveBill(
+          bill,
+          updateLocalId: _currentBillLocalId,
+        ),
       );
 
       if (!mounted) return;
@@ -1109,18 +1118,23 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         setState(() => _billNo = result.data!);
       }
 
-      try {
-        _currentBillLocalId = await LocalDb.instance.findLocalIdByBillNo(
-              location: _selectedLocation,
-              billNo: _billNo,
-            ) ??
-            _currentBillLocalId;
-      } catch (_) {
-        // Bill is saved; local id lookup is best-effort.
-      }
+      await timings.timeAsync('local_id_lookup', () async {
+        try {
+          _currentBillLocalId = await LocalDb.instance.findLocalIdByBillNo(
+                location: _selectedLocation,
+                billNo: _billNo,
+              ) ??
+              _currentBillLocalId;
+        } catch (_) {
+          // Bill is saved; local id lookup is best-effort.
+        }
+      });
 
       final int savedBillNo = _billNo;
-      await _printBillAfterSave(bill, savedBillNo);
+      await timings.timeAsync(
+        'print_receipt',
+        () => _printBillAfterSave(bill, savedBillNo),
+      );
       developer.log(
         'Save bill finished (bill $savedBillNo)',
         name: 'SalesBill.print777',
@@ -1128,7 +1142,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
       if (!mounted) return;
 
-      await _loadBillNumber();
+      await timings.timeAsync('load_bill_number', () => _loadBillNumber());
 
       if (!mounted) return;
 
@@ -1137,9 +1151,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         _clearCurrentBill();
       });
 
-      await _persistSession();
+      await timings.timeAsync('persist_session', () => _persistSession());
       if (_todaySalesPanelVisible) {
-        unawaited(_refreshTodaySales());
+        await timings.timeAsync('refresh_today_sales', () => _refreshTodaySales());
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1156,6 +1170,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         _showMessage('Save failed: $e');
       }
     } finally {
+      await timings.finish();
       if (mounted) {
         setState(() => _busy = false);
       }
