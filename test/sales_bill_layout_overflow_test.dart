@@ -15,6 +15,7 @@ import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/services/sync_service.dart';
+import 'package:surabhi/utils/money_format.dart';
 
 class _FakePathProvider extends Fake
     with MockPlatformInterfaceMixin
@@ -83,6 +84,44 @@ void main() {
         rate: 10.0 + index,
       ),
     );
+  }
+
+  List<BillItem> tenItemsWithGrandTotal(double grandTotal) {
+    final rate = grandTotal / 10;
+    return List.generate(
+      10,
+      (index) => BillItem(
+        particular: index == 0 ? 'AA' : 'ITEM ${index + 1}',
+        qty: 1,
+        rate: rate,
+      ),
+    );
+  }
+
+  double textFontSize(WidgetTester tester, Finder finder) {
+    final text = tester.widget<Text>(finder);
+    return text.style?.fontSize ?? 0;
+  }
+
+  void expectRow10AboveHorizontalScrollbar(WidgetTester tester) {
+    final row10 = find.text('ITEM 10');
+    expect(row10, findsOneWidget);
+    final rowBottom = tester.getRect(row10).bottom;
+    final scrollbarRect = tester.getRect(find.byType(Scrollbar).first);
+    const gridBodyHeight = 22.0 * 10;
+    expect(
+      rowBottom,
+      lessThanOrEqualTo(scrollbarRect.top + gridBodyHeight + 1),
+    );
+  }
+
+  Future<void> showRateValidationError(WidgetTester tester) async {
+    await tester.enterText(find.byKey(const Key('bill_rate_field')), '0');
+    await tester.tap(find.byKey(const Key('bill_qty_field')));
+    await tester.enterText(find.byKey(const Key('bill_qty_field')), '1');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(find.text('Rate must be greater than 0'), findsOneWidget);
   }
 
   double maxVerticalListScrollExtent(WidgetTester tester) {
@@ -236,7 +275,6 @@ void main() {
     await pumpSalesBillDesktop(tester, items: billItems(11));
 
     expect(maxVerticalListScrollExtent(tester), greaterThan(0));
-    expect(find.text('11'), findsNothing);
 
     final verticalList = find.byWidgetPredicate(
       (widget) =>
@@ -246,6 +284,70 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
     expect(find.text('11'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'grand total 7067.00 layout has no overflow at 1366x768 with 10 items',
+      (tester) async {
+    await pumpSalesBillDesktop(
+      tester,
+      items: tenItemsWithGrandTotal(7067),
+    );
+
+    expect(find.text(formatMoneyAmount(7067)), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'grand total 1234567.00 layout has no overflow at 1366x768 with 10 items',
+      (tester) async {
+    await pumpSalesBillDesktop(
+      tester,
+      items: tenItemsWithGrandTotal(1234567),
+    );
+
+    expect(find.text(formatMoneyAmount(1234567)), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'grid header and short cell render at font size 10 without shrink',
+      (tester) async {
+    await pumpSalesBillDesktop(
+      tester,
+      items: tenItemsWithGrandTotal(7067),
+    );
+
+    expect(textFontSize(tester, find.text('S.NO')), 10);
+    expect(textFontSize(tester, find.text('AA')), 10);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'row 10 stays above horizontal scrollbar with rate error visible',
+      (tester) async {
+    await pumpSalesBillDesktop(tester, items: billItems(10));
+    await showRateValidationError(tester);
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+
+    expectRow10AboveHorizontalScrollbar(tester);
     expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();

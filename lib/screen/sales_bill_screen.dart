@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -116,8 +117,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _gridTotalWidth = _entryBlockWidth + _deleteColWidth;
   static const double _gridVisibleItemRows = 10;
   static const double _gridBodyHeight = _tableRowHeight * _gridVisibleItemRows;
+  static const double _gridHScrollbarStripHeight = 12;
+  static const double _gridBodyScrollZoneHeight =
+      _gridBodyHeight + _gridHScrollbarStripHeight;
   static const double _gridFrameHeight =
-      _tableHeaderHeight + _gridBodyHeight + _gridFooterHeight;
+      _tableHeaderHeight + _gridBodyScrollZoneHeight + _gridFooterHeight;
   static const double _bottomBarHeight = 44;
   static const double _desktopChromeEstimate = 320;
   static const double _gridMinScrollHeight = _gridFrameHeight;
@@ -1469,33 +1473,94 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   double _gridFontSizeForWidth(double width) => _gridFontSize;
 
+  bool _gridTextFits(
+    String text,
+    double fontSize,
+    FontWeight fontWeight,
+    double maxWidth,
+    int maxLines,
+    ui.TextDirection textDirection,
+  ) {
+    if (maxWidth <= 0 || !maxWidth.isFinite) {
+      return true;
+    }
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          height: 1.1,
+        ),
+      ),
+      textDirection: textDirection,
+      maxLines: maxLines,
+    )..layout(maxWidth: maxWidth);
+    return !painter.didExceedMaxLines;
+  }
+
+  double _gridCellFontSize(
+    String text,
+    double fontSize,
+    FontWeight fontWeight,
+    double maxWidth,
+    int maxLines,
+    ui.TextDirection textDirection,
+  ) {
+    if (_gridTextFits(
+      text,
+      fontSize,
+      fontWeight,
+      maxWidth,
+      maxLines,
+      textDirection,
+    )) {
+      return fontSize;
+    }
+    for (var size = fontSize - 0.5; size >= _gridMinFontSize; size -= 0.5) {
+      if (_gridTextFits(
+        text,
+        size,
+        fontWeight,
+        maxWidth,
+        maxLines,
+        textDirection,
+      )) {
+        return size;
+      }
+    }
+    return _gridMinFontSize;
+  }
+
   Widget _gridCellText(
     String text, {
     required double fontSize,
-    FontWeight fontWeight = FontWeight.w600,
+    FontWeight fontWeight = FontWeight.w700,
     int maxLines = 2,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
-        final minScale = _gridMinFontSize / fontSize;
-        return FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.center,
-          child: SizedBox(
-            width: maxWidth > 0 ? maxWidth / minScale : null,
-            child: Text(
-              text,
-              maxLines: maxLines,
-              softWrap: true,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: fontWeight,
-                height: 1.1,
-                color: const Color(0xFF111111),
-              ),
-            ),
+        final textDirection = Directionality.of(context);
+        final resolvedSize = _gridCellFontSize(
+          text,
+          fontSize,
+          fontWeight,
+          maxWidth,
+          maxLines,
+          textDirection,
+        );
+        return Text(
+          text,
+          maxLines: maxLines,
+          softWrap: true,
+          overflow: TextOverflow.clip,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: resolvedSize,
+            fontWeight: fontWeight,
+            height: 1.1,
+            color: const Color(0xFF000000),
           ),
         );
       },
@@ -1527,14 +1592,14 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 useSidebarLayout: useSidebarLayout,
                 menuContext: context,
               ),
-              const SizedBox(height: _topAreaGap),
+              const SizedBox(height: 4),
               SizedBox(
                 height: _gridFrameHeight,
                 child: _buildDesktopGridZone(
                   gridFontSize: gridFontSize,
                 ),
               ),
-              const SizedBox(height: _topAreaGap),
+              const SizedBox(height: 4),
               _buildSaveSaleBar(),
             ],
           );
@@ -1543,7 +1608,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         final content = FocusTraversalGroup(
           policy: OrderedTraversalPolicy(),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: fitsFixedLayout
                 ? columnChild(expandGrid: true)
                 : SingleChildScrollView(
@@ -2822,6 +2887,19 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       child: _buildItemRowsList(showTax, gridFontSize, scrollWidth),
     );
 
+    Widget horizontalBodyScroller = SizedBox(
+      height: _gridBodyScrollZoneHeight,
+      child: Scrollbar(
+        controller: _gridHScrollController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _gridHScrollController,
+          scrollDirection: Axis.horizontal,
+          child: horizontalBody,
+        ),
+      ),
+    );
+
     return SizedBox(
       width: _gridTotalWidth,
       height: _gridFrameHeight,
@@ -2849,26 +2927,26 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               ],
             ),
             SizedBox(
-              height: _gridBodyHeight,
+              height: _gridBodyScrollZoneHeight,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: _gridViewportWidth,
-                    child: Scrollbar(
-                      controller: _gridHScrollController,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _gridHScrollController,
-                        scrollDirection: Axis.horizontal,
-                        child: horizontalBody,
-                      ),
-                    ),
+                    child: horizontalBodyScroller,
                   ),
                   SizedBox(
                     width: _deleteColWidth,
-                    height: _gridBodyHeight,
-                    child: _buildDeleteRowsList(),
+                    height: _gridBodyScrollZoneHeight,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: _gridBodyHeight,
+                          child: _buildDeleteRowsList(),
+                        ),
+                        const SizedBox(height: _gridHScrollbarStripHeight),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -3217,7 +3295,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       child: _gridCellText(
         text,
         fontSize: fontSize,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -3328,67 +3406,61 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                   width: primary,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      'GRAND TOTAL',
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: const TextStyle(
+                        fontSize: _grandTotalLabelFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: primary * 3,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       child: Text(
-                        'GRAND TOTAL',
+                        words,
                         maxLines: 1,
+                        softWrap: false,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: _grandTotalLabelFontSize,
-                          fontWeight: FontWeight.bold,
+                          fontSize: _grandTotalWordsFontSize,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.navy,
+                          height: 1,
                         ),
                       ),
                     ),
                   ),
                 ),
-                SizedBox(width: primary),
-                SizedBox(width: primary),
-                SizedBox(width: primary),
                 SizedBox(
                   width: primary,
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        SizedBox(
-                          height: 22,
-                          child: Align(
-                            alignment: Alignment.bottomRight,
-                            child: Text(
-                              _formatAmount(_grandTotal),
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: _grandTotalValueFontSize,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.navy,
-                                height: 1,
-                              ),
-                            ),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          _formatAmount(_grandTotal),
+                          maxLines: 1,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: _grandTotalValueFontSize,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.navy,
+                            height: 1,
                           ),
                         ),
-                        SizedBox(
-                          height: 22,
-                          child: Align(
-                            alignment: Alignment.topRight,
-                            child: Text(
-                              words,
-                              maxLines: 2,
-                              textAlign: TextAlign.right,
-                              softWrap: true,
-                              style: const TextStyle(
-                                fontSize: _grandTotalWordsFontSize,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.mutedBlue,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
