@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,9 +74,38 @@ void main() {
     await AppConfig.clearLocation();
   });
 
+  List<BillItem> billItems(int count) {
+    return List.generate(
+      count,
+      (index) => BillItem(
+        particular: 'ITEM ${index + 1}',
+        qty: 1,
+        rate: 10.0 + index,
+      ),
+    );
+  }
+
+  double maxVerticalListScrollExtent(WidgetTester tester) {
+    var maxExtent = 0.0;
+    final listViews = tester.widgetList<ListView>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ListView && widget.scrollDirection == Axis.vertical,
+      ),
+    );
+    for (final listView in listViews) {
+      final controller = listView.controller;
+      if (controller != null && controller.hasClients) {
+        maxExtent = math.max(maxExtent, controller.position.maxScrollExtent);
+      }
+    }
+    return maxExtent;
+  }
+
   Future<void> pumpSalesBillDesktop(
     WidgetTester tester, {
     required List<BillItem> items,
+    bool sidebarOpen = false,
   }) async {
     await SessionService.saveBillSession(
       location: AppConfig.displayLocationName,
@@ -109,6 +139,12 @@ void main() {
     }
 
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
+
+    if (sidebarOpen) {
+      await tester.tap(find.byIcon(Icons.menu).first);
+      await tester.pumpAndSettle(const Duration(milliseconds: 300));
+      expect(find.byIcon(Icons.menu_open), findsWidgets);
+    }
   }
 
   testWidgets('sales bill desktop layout has no overflow at 1366x768 with 3 items',
@@ -151,6 +187,65 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
     expect(find.byKey(const Key('today_sales_panel')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill shows 10 grid rows without vertical scroll at 1366x768',
+      (tester) async {
+    await pumpSalesBillDesktop(tester, items: billItems(10));
+
+    for (var serial = 1; serial <= 10; serial++) {
+      expect(find.text('$serial'), findsWidgets);
+    }
+    expect(maxVerticalListScrollExtent(tester), 0);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill shows 10 grid rows with sidebar open at 1366x768',
+      (tester) async {
+    await pumpSalesBillDesktop(
+      tester,
+      items: billItems(10),
+      sidebarOpen: true,
+    );
+
+    for (var serial = 1; serial <= 10; serial++) {
+      expect(find.text('$serial'), findsWidgets);
+    }
+    expect(maxVerticalListScrollExtent(tester), 0);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill grid scrolls internally with more than 10 items at 1366x768',
+      (tester) async {
+    await pumpSalesBillDesktop(tester, items: billItems(11));
+
+    expect(maxVerticalListScrollExtent(tester), greaterThan(0));
+    expect(find.text('11'), findsNothing);
+
+    final verticalList = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListView && widget.scrollDirection == Axis.vertical,
+    );
+    await tester.drag(verticalList.first, const Offset(0, -80));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+
+    expect(find.text('11'), findsWidgets);
     expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();

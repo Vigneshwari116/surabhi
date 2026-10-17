@@ -74,7 +74,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   /// Bill screen typography — local only; other screens stay on [AppTextSizes].
   static const double _entryFontSize = 24;
   static const double _normalFontSize = 18;
-  static const double _gridFontSize = 18;
+  static const double _gridFontSize = 10;
+  static const double _gridMinFontSize = 8;
   static const double _grandTotalAmountFontSize = 24;
   static const double _amountInWordsFontSize = 14;
   static const double _todayCardLabelFontSize = 16;
@@ -99,11 +100,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _actionButtonGap = 12;
   static const double _framesGap = 12;
   static const double _framePadding = 8;
-  static const double _tableHeaderHeight = 40;
-  static const double _tableRowHeight = 38;
+  static const double _tableHeaderHeight = 26;
+  static const double _tableRowHeight = 22;
   static const double _editRowHeight = 68;
-  static const double _gridFooterTotalRowHeight = 34;
-  static const double _gridFooterGrandRowHeight = 64;
+  static const double _gridFooterTotalRowHeight = 28;
+  static const double _gridFooterGrandRowHeight = 48;
   static const double _gridFooterHeight =
       _gridFooterTotalRowHeight + _gridFooterGrandRowHeight;
   static const double _grandTotalLabelFontSize = 20;
@@ -113,7 +114,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   static const double _entryBlockWidth =
       _groupBoxWidth + (_entryColumnGap * 3) + (_numericBoxWidth * 3);
   static const double _gridTotalWidth = _entryBlockWidth + _deleteColWidth;
-  static const double _gridBodyHeight = (_tableRowHeight * 5) - 18;
+  static const double _gridVisibleItemRows = 10;
+  static const double _gridBodyHeight = _tableRowHeight * _gridVisibleItemRows;
   static const double _gridFrameHeight =
       _tableHeaderHeight + _gridBodyHeight + _gridFooterHeight;
   static const double _bottomBarHeight = 44;
@@ -1466,6 +1468,39 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   }
 
   double _gridFontSizeForWidth(double width) => _gridFontSize;
+
+  Widget _gridCellText(
+    String text, {
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.w600,
+    int maxLines = 2,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final minScale = _gridMinFontSize / fontSize;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: maxWidth > 0 ? maxWidth / minScale : null,
+            child: Text(
+              text,
+              maxLines: maxLines,
+              softWrap: true,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                height: 1.1,
+                color: const Color(0xFF111111),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildDesktopBody({
     required BuildContext context,
@@ -2952,20 +2987,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         ),
       ),
       alignment: Alignment.center,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          text.toUpperCase(),
-          maxLines: 2,
-          softWrap: true,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.bold,
-            height: 1.1,
-            color: const Color(0xFF111111),
-          ),
-        ),
+      child: _gridCellText(
+        text.toUpperCase(),
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
@@ -3158,8 +3183,8 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           skipTraversal: true,
           child: IconButton(
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            icon: const Icon(Icons.close, color: AppColors.danger, size: 22),
+            constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+            icon: const Icon(Icons.close, color: AppColors.danger, size: 18),
             tooltip: 'Remove item',
             onPressed: () => _removeItem(index),
           ),
@@ -3189,20 +3214,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         ),
       ),
       alignment: Alignment.center,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          text,
-          maxLines: 2,
-          softWrap: true,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w600,
-            height: 1.1,
-            color: const Color(0xFF111111),
-          ),
-        ),
+      child: _gridCellText(
+        text,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
@@ -3313,12 +3328,17 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                   width: primary,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      'GRAND TOTAL',
-                      style: const TextStyle(
-                        fontSize: _grandTotalLabelFontSize,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.navy,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'GRAND TOTAL',
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: _grandTotalLabelFontSize,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ),
                   ),
@@ -3335,7 +3355,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         SizedBox(
-                          height: 30,
+                          height: 22,
                           child: Align(
                             alignment: Alignment.bottomRight,
                             child: Text(
@@ -3351,7 +3371,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                           ),
                         ),
                         SizedBox(
-                          height: 28,
+                          height: 22,
                           child: Align(
                             alignment: Alignment.topRight,
                             child: Text(
