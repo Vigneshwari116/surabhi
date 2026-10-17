@@ -43,6 +43,7 @@ void main() {
     expect(text, contains('SURABHI EXPORT'));
     expect(text, contains('THARGUPET'));
     expect(text, contains('T.10, 3RD FLOOR'));
+    expect(text, contains('LAL BUILDING'));
     expect(text, contains('29ACDPJ2452J1ZK'));
     expect(text, contains('BILL NO:133'));
     expect(text, contains('13/10/2026'));
@@ -129,18 +130,81 @@ void main() {
     expect(totalLine, isNot(contains('.')));
   });
 
-  test('receipt prints gst line once without decimals on money columns', () {
+  test('receipt prints gst percents on tax rows with two decimals', () {
     final text = ReceiptService.buildReceiptText(_sampleBill());
-    expect(text, contains('CGST 2.5%  SGST 2.5%'));
+    expect(text, isNot(contains('CGST 2.5%  SGST 2.5%')));
+    expect(text, contains('CGST 2.5%'));
+    expect(text, contains('SGST 2.5%'));
+    expect(text, contains('1.19'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
     expect(text, contains('50'));
     expect(text, contains('48'));
-    expect(text, isNot(contains('50.00')));
     expect(text, isNot(contains('47.62')));
 
     final gstMatches = 'CGST 2.5%'.allMatches(text).length;
     expect(gstMatches, 1);
+  });
+
+  test('rate 30 qty 2 prints taxable 57 with gst 1.50 each and grand 60',
+      () {
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 17),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'Shirt', qty: 2, rate: 30),
+      ],
+      totalQty: 2,
+      totalAmount: 57,
+      totalCgst: 1.5,
+      totalSgst: 1.5,
+      totalIgst: 0,
+      grandTotal: 60,
+    );
+
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final text = lines.join('\n');
+
+    expect(text, contains('TOTAL PCS'));
+    expect(text, contains('57'));
+    expect(text, contains('CGST 2.5%'));
+    expect(text, contains('1.50'));
+    expect(text, contains('SGST 2.5%'));
+    expect(text, contains('GRAND TOTAL'));
+    expect(text, contains('60'));
+    _expectLinesWithinWidth(lines);
+  });
+
+  test('large gst amounts print with two decimals within column width', () {
+    final bill = SaleBill(
+      billNo: 99,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 17),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'Coat', qty: 1, rate: 10000),
+      ],
+      totalQty: 1,
+      totalAmount: 9524,
+      totalCgst: 168,
+      totalSgst: 168,
+      totalIgst: 0,
+      grandTotal: 9860,
+    );
+
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final cgstLine = lines.firstWhere((l) => l.contains('CGST 2.5%'));
+    final sgstLine = lines.firstWhere((l) => l.contains('SGST 2.5%'));
+
+    expect(cgstLine.trimRight(), endsWith('168.00'));
+    expect(sgstLine.trimRight(), endsWith('168.00'));
+    _expectLinesWithinWidth(lines);
   });
 
   test('item section has one separator after header and one after last item', () {
@@ -164,8 +228,8 @@ void main() {
     );
     final lines = ReceiptService.buildReceiptLines(bill);
     final headerIndex = lines.indexWhere((l) => l.contains('GROUP'));
-    final gstIndex = lines.indexWhere((l) => l.contains('CGST 2.5%'));
-    final section = lines.sublist(headerIndex, gstIndex);
+    final totalPcsIndex = lines.indexWhere((l) => l.contains('TOTAL PCS'));
+    final section = lines.sublist(headerIndex, totalPcsIndex);
     final dashLines =
         section.where((line) => line == '-' * _cols).toList(growable: false);
     expect(dashLines.length, 2);
@@ -342,6 +406,7 @@ void _expectLinesWithinWidth(List<String> lines) {
 void _expectAddressWordsNotSplit(List<String> lines) {
   final text = lines.join('\n');
   expect(text, contains('T.10, 3RD FLOOR'));
+  expect(text, contains('LAL BUILDING'));
   expect(text, contains('OLD THARGUPET'));
   for (final line in lines) {
     final trimmed = line.trim();

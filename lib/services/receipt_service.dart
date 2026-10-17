@@ -72,8 +72,10 @@ class ReceiptService {
     final separator = _separatorLine();
 
     lines.add(_lineCentered(businessName));
-    for (final addressLine in _wrapToWidth(profile.addressLine, _contentWidth)) {
-      lines.add(_lineCentered(addressLine));
+    for (final addressPart in profile.addressLines) {
+      for (final addressLine in _wrapToWidth(addressPart, _contentWidth)) {
+        lines.add(_lineCentered(addressLine));
+      }
     }
     for (final gstinLine in _wrapToWidth('GSTIN:$gstin', _contentWidth)) {
       lines.add(_lineCentered(gstinLine));
@@ -94,15 +96,39 @@ class ReceiptService {
       lines.add(separator);
     }
 
-    for (final gstLine in _distinctGstLines(bill.items)) {
-      lines.add(_line(gstLine));
-    }
-
     lines.add(_line(_totalLine(bill.totalQty, bill.totalAmount)));
-    lines.add(_line(_rightAmountLine('CGST', bill.totalCgst)));
-    lines.add(_line(_rightAmountLine('SGST', bill.totalSgst)));
+    if (bill.totalCgst > 0 || bill.items.any((i) => i.cgstPct > 0)) {
+      lines.add(
+        _line(
+          _taxAmountLine(
+            'CGST',
+            bill.totalCgst,
+            _billCgstPct(bill),
+          ),
+        ),
+      );
+    }
+    if (bill.totalSgst > 0 || bill.items.any((i) => i.sgstPct > 0)) {
+      lines.add(
+        _line(
+          _taxAmountLine(
+            'SGST',
+            bill.totalSgst,
+            _billSgstPct(bill),
+          ),
+        ),
+      );
+    }
     if (bill.totalIgst > 0) {
-      lines.add(_line(_rightAmountLine('IGST', bill.totalIgst)));
+      lines.add(
+        _line(
+          _taxAmountLine(
+            'IGST',
+            bill.totalIgst,
+            _billIgstPct(bill),
+          ),
+        ),
+      );
     }
     lines.add(separator);
     lines.add(_line(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
@@ -115,24 +141,40 @@ class ReceiptService {
 
   static String _separatorLine() => '-' * _contentWidth;
 
-  static List<String> _distinctGstLines(List<BillItem> items) {
-    final seen = <String>{};
-    final lines = <String>[];
-    for (final item in items) {
-      final key = '${item.cgstPct}|${item.sgstPct}|${item.igstPct}';
-      if (!seen.add(key)) {
-        continue;
-      }
-      lines.add(_itemGstLine(item));
-    }
-    return lines;
-  }
-
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
-      addressLine:
-          'T.10, 3RD FLOOR, L N COMPLEX, OLD THARGUPET, Bangalore',
+      addressLines: [
+        'T.10, 3RD FLOOR, L N COMPLEX,',
+        'LAL BUILDING,',
+        'OLD THARGUPET, Bangalore',
+      ],
     );
+  }
+
+  static double _billCgstPct(SaleBill bill) => _uniformPct(
+        bill.items.map((item) => item.cgstPct),
+        fallback: bill.items.isNotEmpty ? bill.items.first.cgstPct : 0,
+      );
+
+  static double _billSgstPct(SaleBill bill) => _uniformPct(
+        bill.items.map((item) => item.sgstPct),
+        fallback: bill.items.isNotEmpty ? bill.items.first.sgstPct : 0,
+      );
+
+  static double _billIgstPct(SaleBill bill) => _uniformPct(
+        bill.items.map((item) => item.igstPct),
+        fallback: bill.items.isNotEmpty ? bill.items.first.igstPct : 0,
+      );
+
+  static double _uniformPct(
+    Iterable<double> values, {
+    required double fallback,
+  }) {
+    final set = values.toSet();
+    if (set.length == 1) {
+      return set.first;
+    }
+    return fallback;
   }
 
   static List<String> _wrapToWidth(String text, int width) {
@@ -217,17 +259,6 @@ class ReceiptService {
     return upper.substring(0, _groupW);
   }
 
-  static String _itemGstLine(BillItem item) {
-    final parts = <String>[
-      'CGST ${_formatPct(item.cgstPct)}%',
-      'SGST ${_formatPct(item.sgstPct)}%',
-    ];
-    if (item.igstPct > 0) {
-      parts.add('IGST ${_formatPct(item.igstPct)}%');
-    }
-    return parts.join('  ');
-  }
-
   static String _totalLine(double qty, double taxableTotal) {
     final leftWidth =
         _snoW + ReceiptLayout.columnGap + _groupW + ReceiptLayout.columnGap + _rateW;
@@ -242,6 +273,16 @@ class ReceiptService {
   static String _rightAmountLine(String label, double amount) {
     final labelPart = _padRight(label, _labelW);
     return '$labelPart${_padLeft(_wholeNumber(amount), _amountW)}';
+  }
+
+  static String _taxAmountLine(String kind, double amount, double pct) {
+    final label = pct > 0 ? '$kind ${_formatPct(pct)}%' : kind;
+    return _rightAmountLineDecimals(label, amount);
+  }
+
+  static String _rightAmountLineDecimals(String label, double amount) {
+    final labelPart = _padRight(label, _labelW);
+    return '$labelPart${_padLeft(_twoDecimals(amount), _amountW)}';
   }
 
   static String _fieldLine(String label, String value) {
@@ -313,6 +354,10 @@ class ReceiptService {
     return '${_roundHalfUp(value)}';
   }
 
+  static String _twoDecimals(double value) {
+    return NumberFormat('0.00').format(value);
+  }
+
   static int _roundHalfUp(double value) {
     if (value >= 0) {
       return (value + 0.5).floor();
@@ -329,7 +374,7 @@ class ReceiptService {
 }
 
 class _LocationReceiptProfile {
-  final String addressLine;
+  final List<String> addressLines;
 
-  const _LocationReceiptProfile({required this.addressLine});
+  const _LocationReceiptProfile({required this.addressLines});
 }

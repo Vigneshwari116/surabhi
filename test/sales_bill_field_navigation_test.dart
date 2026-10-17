@@ -272,6 +272,51 @@ void main() {
     await tearDownBillScreen(tester);
   });
 
+  testWidgets('second 777 while save is in progress is ignored', (tester) async {
+    var saveCalls = 0;
+
+    await SessionService.saveBillSession(
+      location: AppConfig.displayLocationName,
+      billNo: 1,
+      billDate: DateTime.now(),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(qty: 1, rate: 50)],
+      billSaved: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SalesBillScreen(
+          saveBillOverride: () async {
+            saveCalls++;
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+          },
+        ),
+      ),
+    );
+
+    for (var i = 0; i < 80; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.byIcon(Icons.close).evaluate().isNotEmpty) {
+        break;
+      }
+    }
+
+    await tester.tap(rateField);
+    await tester.enterText(rateField, '777');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.enterText(rateField, '777');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(saveCalls, 1);
+
+    await tearDownBillScreen(tester);
+  });
+
   testWidgets('invalid qty on add shows inline error', (tester) async {
     await pumpBillScreen(tester);
 

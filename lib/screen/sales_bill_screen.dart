@@ -1,5 +1,6 @@
 
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -854,17 +855,59 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     final rateText = _rateController.text.trim();
 
     if (rateText == _printCode) {
-      _rateController.text = '0';
-      if (_items.isEmpty) {
-        _showMessage('Add items before printing');
-        return;
-      }
-      final save = widget.saveBillOverride ?? _saveBill;
-      await save();
+      await _handlePrintCodeSubmit();
       return;
     }
 
     _focusQty();
+  }
+
+  Future<void> _handlePrintCodeSubmit() async {
+    if (_busy) {
+      developer.log(
+        'Print code $_printCode ignored: save/print already in progress',
+        name: 'SalesBill.print777',
+      );
+      return;
+    }
+
+    developer.log(
+      'Print code $_printCode detected',
+      name: 'SalesBill.print777',
+    );
+
+    _rateController.text = '0';
+    if (_items.isEmpty) {
+      _showMessage('Add items before printing');
+      return;
+    }
+
+    developer.log('Print code $_printCode: save starting', name: 'SalesBill.print777');
+    try {
+      if (widget.saveBillOverride != null) {
+        setState(() => _busy = true);
+        try {
+          await widget.saveBillOverride!();
+        } finally {
+          if (mounted) {
+            setState(() => _busy = false);
+          }
+        }
+      } else {
+        await _saveBill();
+      }
+      developer.log('Print code $_printCode: save finished', name: 'SalesBill.print777');
+    } catch (e, stackTrace) {
+      developer.log(
+        'Print code $_printCode: save failed: $e',
+        name: 'SalesBill.print777',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        _showMessage('Save failed: $e');
+      }
+    }
   }
 
   void _qtySubmitted() {
@@ -1026,7 +1069,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
   // ============================================================
 
   Future<void> _saveBill() async {
-    if (_busy) return;
+    if (_busy) {
+      developer.log('Save skipped: already busy', name: 'SalesBill.print777');
+      return;
+    }
 
     if (_items.isEmpty) {
       _showMessage('Add at least one item before saving');
@@ -1034,6 +1080,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
     }
 
     setState(() => _busy = true);
+    developer.log('Save bill starting', name: 'SalesBill.print777');
 
     try {
       final bill = _buildCurrentBill();
@@ -1065,6 +1112,10 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
       final int savedBillNo = _billNo;
       await _printBillAfterSave(bill, savedBillNo);
+      developer.log(
+        'Save bill finished (bill $savedBillNo)',
+        name: 'SalesBill.print777',
+      );
 
       if (!mounted) return;
 
@@ -1085,7 +1136,13 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusPayment();
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      developer.log(
+        'Save bill failed: $e',
+        name: 'SalesBill.print777',
+        error: e,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
         _showMessage('Save failed: $e');
       }
@@ -1251,6 +1308,11 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal) ??
             '';
 
+    developer.log(
+      'Print starting for bill $savedBillNo (printer: ${savedPrinter.isEmpty ? '(none)' : savedPrinter})',
+      name: 'SalesBill.print777',
+    );
+
     try {
       await BillPrintService.printReceipt(
         bill,
@@ -1258,15 +1320,29 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
         type: PrinterType.thermal,
       );
       if (!mounted) return;
+      developer.log(
+        'Print finished for bill $savedBillNo',
+        name: 'SalesBill.print777',
+      );
       _showMessage('Bill $savedBillNo saved and printed');
-    } on BillPrintException {
+    } on BillPrintException catch (e) {
+      developer.log(
+        'Print failed for bill $savedBillNo: ${e.message}',
+        name: 'SalesBill.print777',
+        error: e,
+      );
       if (!mounted) return;
       await _showPrinterNotConfiguredDialog();
-      _showMessage('Bill $savedBillNo saved (not printed)');
-    } catch (_) {
+      _showMessage('Print failed: ${e.message}');
+    } catch (e, stackTrace) {
+      developer.log(
+        'Print failed for bill $savedBillNo: $e',
+        name: 'SalesBill.print777',
+        error: e,
+        stackTrace: stackTrace,
+      );
       if (!mounted) return;
-      await _showPrinterNotConfiguredDialog();
-      _showMessage('Bill $savedBillNo saved (not printed)');
+      _showMessage('Print failed: $e');
     }
   }
 
@@ -2760,7 +2836,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               controller: _rateController,
               focusNode: _rateFocus,
               onChanged: _rateChanged,
-              onSubmitted: _rateSubmitted,
+              onSubmitted: () => unawaited(_rateSubmitted()),
               textInputAction: TextInputAction.next,
               fieldKey: const Key('bill_rate_field'),
               traversalOrder: const NumericFocusOrder(3),
@@ -2801,7 +2877,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
               controller: _rateController,
               focusNode: _rateFocus,
               onChanged: _rateChanged,
-              onSubmitted: _rateSubmitted,
+              onSubmitted: () => unawaited(_rateSubmitted()),
               textInputAction: TextInputAction.done,
               fieldKey: const Key('bill_rate_field'),
             ),
