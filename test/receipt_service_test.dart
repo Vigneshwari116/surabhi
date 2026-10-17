@@ -369,6 +369,56 @@ void main() {
     expect(billDateLine.trim().length, lessThanOrEqualTo(_cols));
   });
 
+  test('footer grand totals print full amount without digit loss', () {
+    const amounts = [9999.99, 10000.00, 12345.67, 1234567.89];
+    for (final grand in amounts) {
+      final bill = SaleBill(
+        billNo: 1,
+        location: 'Surabhi',
+        billDate: DateTime(2026, 1, 1),
+        paymentMode: 'CASH',
+        customerName: '',
+        mobile: '',
+        items: [BillItem(particular: 'X', qty: 1, rate: grand)],
+        totalQty: 1,
+        totalAmount: grand,
+        totalCgst: 0,
+        totalSgst: 0,
+        totalIgst: 0,
+        grandTotal: grand,
+      );
+      final lines = ReceiptService.buildReceiptLines(bill);
+      final grandLine = lines.firstWhere((l) => l.contains('GRAND TOTAL'));
+      final expected = grand.toStringAsFixed(2);
+      expect(grandLine.trimRight().endsWith(expected), isTrue);
+      expect(grandLine.length, lessThanOrEqualTo(29));
+    }
+  });
+
+  test('TOTAL PCS with 5-digit qty and large taxable fits 29-char footer', () {
+    const taxable = 1234567.89;
+    final bill = SaleBill(
+      billNo: 1,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 1, 1),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(particular: 'X', qty: 12345, rate: 100)],
+      totalQty: 12345,
+      totalAmount: taxable,
+      totalCgst: 0,
+      totalSgst: 0,
+      totalIgst: 0,
+      grandTotal: 1234500,
+    );
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final totalLine = lines.firstWhere((l) => l.contains('TOTAL PCS') || l.contains('PCS 12345'));
+    expect(totalLine.length, lessThanOrEqualTo(29));
+    expect(totalLine.trimRight().endsWith('1234567.89'), isTrue);
+    expect(totalLine, contains('12345'));
+  });
+
   test('grand total uses stored value rounded for print only', () {
     final bill = SaleBill(
       billNo: 1,

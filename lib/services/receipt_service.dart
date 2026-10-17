@@ -22,9 +22,9 @@ class ReceiptService {
   static const int _rateW = ReceiptLayout.rateWidth;
   static const int _qtyW = ReceiptLayout.qtyWidth;
   static const int _amountW = ReceiptLayout.amountWidth;
-  static const int _footerAmountW = 7;
-  static const int _footerLabelW = _contentWidth - _footerAmountW;
-  static const int _labelW = _footerLabelW;
+  static const int _footerLineWidth = 29;
+  static const int _footerAmountW = 10;
+  static const int _footerLabelW = _footerLineWidth - _footerAmountW;
 
   static String buildReceiptText(SaleBill bill) {
     return buildReceiptLines(bill).join('\n');
@@ -263,22 +263,53 @@ class ReceiptService {
 
   static String _totalLine(double qty, double taxableTotal) {
     final label = 'TOTAL PCS ${_wholeNumber(qty)}';
-    return _rightAmountLineDecimals(label, taxableTotal);
+    return _footerAmountLine(label, taxableTotal);
   }
 
   static String _rightAmountLine(String label, double amount) {
-    final labelPart = _padRight(label, _footerLabelW);
-    return '$labelPart${_padLeft(_twoDecimals(amount), _footerAmountW)}';
+    return _footerAmountLine(label, amount);
   }
 
   static String _taxAmountLine(String kind, double amount, double pct) {
     final label = pct > 0 ? '$kind ${_formatPct(pct)}%' : kind;
-    return _rightAmountLineDecimals(label, amount);
+    return _footerAmountLine(label, amount);
   }
 
-  static String _rightAmountLineDecimals(String label, double amount) {
-    final labelPart = _padRight(label, _footerLabelW);
-    return '$labelPart${_padLeft(_twoDecimals(amount), _footerAmountW)}';
+  /// Footer row: up to 29 chars, amount never truncated (10-char field when it fits).
+  static String _footerAmountLine(String label, double amount) {
+    final amountText = _twoDecimals(amount);
+    if (amountText.length <= _footerAmountW) {
+      final labelPart = _padRight(
+        _shortenFooterLabel(label, _footerLabelW),
+        _footerLabelW,
+      );
+      return '$labelPart${amountText.padLeft(_footerAmountW)}';
+    }
+
+    final maxLabelLen = _footerLineWidth - amountText.length;
+    final labelPart = _shortenFooterLabel(label, maxLabelLen);
+    return '$labelPart$amountText';
+  }
+
+  static String _shortenFooterLabel(String label, int maxLen) {
+    if (maxLen <= 0) {
+      return '';
+    }
+    if (label.length <= maxLen) {
+      return label;
+    }
+    if (label.startsWith('TOTAL PCS ')) {
+      final qtyPart = label.substring('TOTAL PCS '.length);
+      final shortened = 'PCS $qtyPart';
+      if (shortened.length <= maxLen) {
+        return shortened;
+      }
+      label = shortened;
+    }
+    if (label.length > maxLen) {
+      return label.substring(0, maxLen);
+    }
+    return label;
   }
 
   static String _fieldLine(String label, String value) {
