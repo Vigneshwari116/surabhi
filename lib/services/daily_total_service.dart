@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
 
@@ -14,6 +15,10 @@ class DailyTotalService {
     required SaleBill current,
     SaleBill? previous,
   }) async {
+    if (!AppConfig.useServerApiEnabled) {
+      return;
+    }
+
     final delta = previous == null
         ? current.grandTotal
         : current.grandTotal - previous.grandTotal;
@@ -32,6 +37,10 @@ class DailyTotalService {
   }
 
   static Future<void> flushPending() async {
+    if (!AppConfig.useServerApiEnabled) {
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_pendingKey) ?? const [];
     if (raw.isEmpty) {
@@ -73,6 +82,10 @@ class DailyTotalService {
     required String date,
     required double amount,
   }) async {
+    if (!AppConfig.useServerApiEnabled) {
+      return;
+    }
+
     await flushPending();
 
     final result = await SalesApi.incrementDailyTotal(

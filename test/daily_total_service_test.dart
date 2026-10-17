@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
@@ -35,7 +36,13 @@ SaleBill _sampleBill({double grandTotal = 350}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    AppConfig.useServerApiOverride = true;
+    SharedPreferences.setMockInitialValues({});
+  });
+
   tearDown(() {
+    AppConfig.useServerApiOverride = null;
     SalesApi.resetClientOverride();
     SharedPreferences.setMockInitialValues({});
   });

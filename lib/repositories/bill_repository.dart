@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:surabhi/api/sales_api.dart';
+import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/services/daily_total_service.dart';
@@ -56,11 +57,16 @@ class BillRepository {
     final timings = SaveStepTimings(billNo: bill.billNo, scope: 'repository');
     await PrintLogService.append('save repository start billNo=${bill.billNo}');
 
-    final saveApi = saveBillApiOverride ?? SalesApi.saveBill;
-    final apiResult = await timings.timeAsync(
-      'save_api',
-      () => saveApi(bill),
-    );
+    final SalesApiResult<int> apiResult;
+    if (AppConfig.useServerApiEnabled) {
+      final saveApi = saveBillApiOverride ?? SalesApi.saveBill;
+      apiResult = await timings.timeAsync('save_api', () => saveApi(bill));
+    } else {
+      await PrintLogService.append(
+        'save scope=repository billNo=${bill.billNo} step=save_api skipped (useServerApi=false) 0ms',
+      );
+      apiResult = SalesApiResult.failure('local-only');
+    }
     final syncStatus = apiResult.ok ? 'synced' : 'pending';
 
     SaleBill? previous;

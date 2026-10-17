@@ -1,9 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:surabhi/config/sales_database.dart';
 
 class AppConfig {
   /// Single shop — no server sync or multi-branch.
   static const bool offlineOnly = true;
+
+  /// When false (Surabhi default), bill save and daily-total push skip VPS HTTP.
+  static const bool useServerApi = false;
+
+  @visibleForTesting
+  static bool? useServerApiOverride;
+
+  static bool get useServerApiEnabled =>
+      useServerApiOverride ?? useServerApi;
 
   static String? _locationCode;
 
