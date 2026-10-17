@@ -8,6 +8,7 @@ import 'package:surabhi/screen/sales_ledger_screen.dart';
 import 'package:surabhi/screen/staff_sales_dashboard_screen.dart';
 import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/app_session_service.dart';
+import 'package:surabhi/services/backup_service.dart';
 import 'package:surabhi/services/location_reset_service.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
@@ -41,6 +42,7 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
   _StaffSection _selectedSection = _StaffSection.bill;
   bool _sidebarExpanded = false;
   int _refreshGeneration = 0;
+  bool _backupInProgress = false;
 
   String get _location => AppConfig.displayLocationName;
 
@@ -59,6 +61,26 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
     return section == _StaffSection.dashboard ||
         section == _StaffSection.abstract ||
         section == _StaffSection.ledger;
+  }
+
+  Future<void> _runBackup() async {
+    if (_backupInProgress) return;
+    setState(() => _backupInProgress = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await BackupService.instance.runBackup(
+      locationName: _location,
+    );
+    if (!mounted) return;
+    setState(() => _backupInProgress = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.ok
+              ? 'Backup saved: ${result.folderPath}'
+              : 'Backup failed: ${result.error}',
+        ),
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -174,15 +196,39 @@ class _StaffDashboardScreenState extends State<StaffDashboardScreen> {
                     ),
                   )
                 : null,
-            footer: Tooltip(
-              message: 'LOGOUT',
-              child: IconButton(
-                key: const Key('staff_nav_logout'),
-                tooltip: _sidebarExpanded ? null : 'LOGOUT',
-                onPressed: _logout,
-                color: Colors.white,
-                icon: const Icon(Icons.logout),
-              ),
+            footer: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: 'BACKUP',
+                  child: IconButton(
+                    key: const Key('staff_nav_backup'),
+                    tooltip: _sidebarExpanded ? null : 'BACKUP',
+                    onPressed: _backupInProgress ? null : _runBackup,
+                    color: Colors.white,
+                    icon: _backupInProgress
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.backup_outlined),
+                  ),
+                ),
+                Tooltip(
+                  message: 'LOGOUT',
+                  child: IconButton(
+                    key: const Key('staff_nav_logout'),
+                    tooltip: _sidebarExpanded ? null : 'LOGOUT',
+                    onPressed: _logout,
+                    color: Colors.white,
+                    icon: const Icon(Icons.logout),
+                  ),
+                ),
+              ],
             ),
             items: _navItems(),
           ),

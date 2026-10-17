@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/services/gst_config_service.dart';
 import 'package:surabhi/services/receipt_layout.dart';
 
 class ReceiptService {
@@ -13,8 +14,10 @@ class ReceiptService {
 
   static const int _contentWidth = thermalContentColumns;
 
-  /// Bill no + date line fits the printable column width.
-  static const int _billDateLineMaxChars = ReceiptLayout.columnCount;
+  /// Bill no + payment + date line (footer-style width).
+  static const int _billDateLineMaxChars = 29;
+
+  static const int _addressLineMaxChars = 29;
 
   static const int _snoW = ReceiptLayout.snoWidth;
   static const String _gap = ' ';
@@ -75,14 +78,14 @@ class ReceiptService {
 
     lines.add(_lineCentered(businessName));
     for (final addressPart in profile.addressLines) {
-      for (final addressLine in _wrapToWidth(addressPart, _contentWidth)) {
+      for (final addressLine in _wrapToWidth(addressPart, _addressLineMaxChars)) {
         lines.add(_lineCentered(addressLine));
       }
     }
     for (final gstinLine in _wrapToWidth('GSTIN:$gstin', _contentWidth)) {
       lines.add(_lineCentered(gstinLine));
     }
-    lines.add(_line(_billDateLine(bill.billNo, bill.billDate)));
+    lines.add(_line(_billDateLine(bill.billNo, bill.billDate, bill.paymentMode)));
     lines.add(_line(_fieldLine('NAME', bill.customerName)));
     lines.add(_line(_fieldLine('MOBILE', bill.mobile)));
     lines.add(separator);
@@ -105,7 +108,7 @@ class ReceiptService {
           _taxAmountLine(
             'CGST',
             bill.totalCgst,
-            _billCgstPct(bill),
+            _effectiveCgstPct(bill),
           ),
         ),
       );
@@ -116,7 +119,7 @@ class ReceiptService {
           _taxAmountLine(
             'SGST',
             bill.totalSgst,
-            _billSgstPct(bill),
+            _effectiveSgstPct(bill),
           ),
         ),
       );
@@ -132,7 +135,7 @@ class ReceiptService {
         ),
       );
     }
-    lines.add(separator);
+    lines.add(_line('-' * _footerLineWidth));
     lines.add(_line(_rightAmountLine('GRAND TOTAL', bill.grandTotal)));
     lines.add(separator);
     lines.add(_line('TERMS AND CONDITION'));
@@ -146,11 +149,33 @@ class ReceiptService {
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
       addressLines: [
-        'T.10, 3RD FLOOR, L N COMPLEX,',
-        'LAL BUILDING,',
+        'T.10, 3RD FLOOR,',
+        'L N COMPLEX, LAL BUILDING,',
         'OLD THARGUPET, Bangalore',
       ],
     );
+  }
+
+  static double _effectiveCgstPct(SaleBill bill) {
+    final fromItems = _billCgstPct(bill);
+    if (fromItems > 0) {
+      return fromItems;
+    }
+    if (bill.totalCgst > 0) {
+      return GstConfigService.defaultCgstPct;
+    }
+    return 0;
+  }
+
+  static double _effectiveSgstPct(SaleBill bill) {
+    final fromItems = _billSgstPct(bill);
+    if (fromItems > 0) {
+      return fromItems;
+    }
+    if (bill.totalSgst > 0) {
+      return GstConfigService.defaultSgstPct;
+    }
+    return 0;
   }
 
   static double _billCgstPct(SaleBill bill) => _uniformPct(
@@ -262,7 +287,12 @@ class ReceiptService {
   }
 
   static String _totalLine(double qty, double taxableTotal) {
-    final label = 'TOTAL PCS ${_wholeNumber(qty)}';
+    final qtyText = _wholeNumber(qty);
+    const head = 'TOTAL PCS';
+    final spaces = _footerLabelW - head.length - qtyText.length;
+    final label = spaces > 0
+        ? '$head${' ' * spaces}$qtyText'
+        : '$head $qtyText';
     return _footerAmountLine(label, taxableTotal);
   }
 
@@ -317,8 +347,11 @@ class ReceiptService {
     return text.isEmpty ? '$label:' : '$label:$text';
   }
 
-  static String _billDateLine(int billNo, DateTime billDate) {
-    final left = 'BILL NO:$billNo';
+  static String _billDateLine(int billNo, DateTime billDate, String paymentMode) {
+    final mode = paymentMode.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+    final left = mode.isEmpty
+        ? 'BILL NO:$billNo'
+        : 'BILL NO:$billNo $mode';
     final dateFormats = [
       DateFormat('dd/MM/yyyy'),
       DateFormat('dd/MM/yy'),
@@ -333,11 +366,17 @@ class ReceiptService {
     }
 
     final dateText = DateFormat('dd/MM/yy').format(billDate);
-    final maxLeft = _billDateLineMaxChars - dateText.length - 1;
-    final trimmedLeft =
-        left.length > maxLeft ? left.substring(0, maxLeft) : left;
+    var trimmedLeft = left;
+    if (trimmedLeft.length + dateText.length + 1 > _billDateLineMaxChars) {
+      final maxLeft = _billDateLineMaxChars - dateText.length - 1;
+      trimmedLeft =
+          left.length > maxLeft ? left.substring(0, maxLeft) : left;
+    }
     final gap = _billDateLineMaxChars - trimmedLeft.length - dateText.length;
-    return '$trimmedLeft${' ' * gap}$dateText';
+    if (gap >= 1) {
+      return '$trimmedLeft${' ' * gap}$dateText';
+    }
+    return '$trimmedLeft $dateText'.substring(0, _billDateLineMaxChars);
   }
 
   static String _line(String content) {

@@ -41,11 +41,12 @@ void main() {
     final text = lines.join('\n');
 
     expect(text, contains('SURABHI EXPORT'));
-    expect(text, contains('THARGUPET'));
-    expect(text, contains('T.10, 3RD FLOOR'));
-    expect(text, contains('LAL BUILDING'));
+    expect(text, contains('OLD THARGUPET'));
+    expect(text, contains('T.10, 3RD FLOOR,'));
+    expect(text, contains('L N COMPLEX, LAL BUILDING,'));
+    expect(text, contains('Bangalore'));
     expect(text, contains('29ACDPJ2452J1ZK'));
-    expect(text, contains('BILL NO:133'));
+    expect(text, contains('BILL NO:133 UPI'));
     expect(text, contains('13/10/2026'));
     expect(text, isNot(contains('DATE:')));
     _expectLinesWithinWidth(lines);
@@ -144,7 +145,54 @@ void main() {
     expect(gstMatches, 1);
   });
 
-  test('rate 30 qty 2 prints taxable 57.14 with gst 1.43 each and grand 60.00',
+  test('bill line omits payment mode when stored value is empty', () {
+    final bill = SaleBill(
+      billNo: 305,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 17),
+      paymentMode: '',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(particular: 'Shirt', qty: 1, rate: 10)],
+      totalQty: 1,
+      totalAmount: 9.52,
+      totalCgst: 0.24,
+      totalSgst: 0.24,
+      totalIgst: 0,
+      grandTotal: 10,
+    );
+    final billLine = ReceiptService.buildReceiptLines(bill)
+        .firstWhere((line) => line.contains('BILL NO:'));
+    expect(billLine, contains('BILL NO:305'));
+    expect(billLine, isNot(contains('CASH')));
+    expect(billLine, isNot(contains('UPI')));
+    expect(billLine.trim().length, lessThanOrEqualTo(29));
+    expect(billLine, contains('17/10/2026'));
+  });
+
+  test('bill line includes payment mode between bill no and date', () {
+    final bill = SaleBill(
+      billNo: 305,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 17),
+      paymentMode: 'UPI',
+      customerName: '',
+      mobile: '',
+      items: [BillItem(particular: 'Shirt', qty: 1, rate: 10)],
+      totalQty: 1,
+      totalAmount: 9.52,
+      totalCgst: 0.24,
+      totalSgst: 0.24,
+      totalIgst: 0,
+      grandTotal: 10,
+    );
+    final billLine = ReceiptService.buildReceiptLines(bill)
+        .firstWhere((line) => line.contains('BILL NO:'));
+    expect(billLine.trim(), 'BILL NO:305 UPI    17/10/2026');
+    expect(billLine.trim().length, lessThanOrEqualTo(29));
+  });
+
+  test('rate 30 qty 2 prints footer block with CGST/SGST below TOTAL PCS',
       () {
     final bill = SaleBill(
       billNo: 1,
@@ -165,16 +213,51 @@ void main() {
     );
 
     final lines = ReceiptService.buildReceiptLines(bill);
-    final text = lines.join('\n');
-    final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
-    final grandLine = lines.firstWhere((line) => line.contains('GRAND TOTAL'));
+    final totalIndex = lines.indexWhere((line) => line.contains('TOTAL PCS'));
+    final grandIndex = lines.indexWhere((line) => line.contains('GRAND TOTAL'));
+    expect(totalIndex, greaterThan(0));
+    expect(grandIndex, greaterThan(totalIndex));
 
-    expect(totalLine.trimRight(), endsWith('57.14'));
-    expect(text, contains('CGST 2.5%'));
-    expect(text, contains('1.43'));
-    expect(text, contains('SGST 2.5%'));
-    expect(grandLine.trimRight(), endsWith('60.00'));
+    final footerBlock = lines.sublist(totalIndex, grandIndex + 1);
+    final footerText = footerBlock.map((l) => l.trimRight()).toList();
+    expect(footerText[0], 'TOTAL PCS         2     57.14');
+    expect(footerText[1], 'CGST 2.5%                1.43');
+    expect(footerText[2], 'SGST 2.5%                1.43');
+    expect(footerText[3], '-' * 29);
+    expect(footerText[4], 'GRAND TOTAL             60.00');
+
+    final itemEnd = lines.indexWhere((line) => line.contains('SHIRT'));
+    final between = lines.sublist(itemEnd + 1, totalIndex);
+    expect(between.any((line) => line.contains('CGST')), isFalse);
+    expect(between.any((line) => line.contains('SGST')), isFalse);
     _expectLinesWithinWidth(lines);
+  });
+
+  test('item with zero gst percent still prints CGST 2.5% on footer', () {
+    final bill = SaleBill(
+      billNo: 2,
+      location: 'Surabhi',
+      billDate: DateTime(2026, 10, 17),
+      paymentMode: 'CASH',
+      customerName: '',
+      mobile: '',
+      items: [
+        BillItem(particular: 'Shirt', qty: 1, rate: 30, cgstPct: 0, sgstPct: 0),
+      ],
+      totalQty: 1,
+      totalAmount: 28.57,
+      totalCgst: 0.71,
+      totalSgst: 0.71,
+      totalIgst: 0,
+      grandTotal: 30,
+    );
+
+    final lines = ReceiptService.buildReceiptLines(bill);
+    final cgstLine = lines.firstWhere((l) => l.contains('CGST 2.5%'));
+    final sgstLine = lines.firstWhere((l) => l.contains('SGST 2.5%'));
+    expect(cgstLine.trimRight(), endsWith('0.71'));
+    expect(sgstLine.trimRight(), endsWith('0.71'));
+    expect(cgstLine.indexOf('TOTAL PCS'), lessThan(0));
   });
 
   test('large gst amounts print with two decimals within column width', () {
@@ -453,9 +536,9 @@ void _expectLinesWithinWidth(List<String> lines) {
 
 void _expectAddressWordsNotSplit(List<String> lines) {
   final text = lines.join('\n');
-  expect(text, contains('T.10, 3RD FLOOR'));
-  expect(text, contains('LAL BUILDING'));
-  expect(text, contains('OLD THARGUPET'));
+  expect(text, contains('T.10, 3RD FLOOR,'));
+  expect(text, contains('L N COMPLEX, LAL BUILDING,'));
+  expect(text, contains('OLD THARGUPET, Bangalore'));
   for (final line in lines) {
     final trimmed = line.trim();
     if (trimmed.contains('3RD') && trimmed.contains('FLOOR')) {
