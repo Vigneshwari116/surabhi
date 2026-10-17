@@ -7,8 +7,10 @@ import 'package:surabhi/screen/ledger_bill_detail_screen.dart';
 import 'package:surabhi/services/ledger_pdf_service.dart';
 import 'package:surabhi/services/sync_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/ledger_group_display.dart';
 import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 class SalesLedgerScreen extends StatefulWidget {
   final String location;
@@ -45,10 +47,13 @@ class SalesLedgerScreen extends StatefulWidget {
 }
 
 class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
-  static const double _tableMinWidth = 1100;
+  static const double _tableMinWidth = 900;
 
-  /// Minimum width for GROUP (~14 monospace characters at table font size).
-  static const double _groupColumnMinWidth = 140;
+  /// Minimum width for GROUP (~20 characters at report table font size).
+  static const double _groupColumnMinWidth = 200;
+
+  static const double _cellHPad = 3;
+  static const double _cellVPad = 4;
 
   bool _loading = true;
   bool _pulling = false;
@@ -356,30 +361,16 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
                 const SizedBox(height: 8),
                 Expanded(
                   child: _entries.isEmpty
-                          ? _buildEmptyState()
-                          : CenteredContent(
-                          maxWidth: 1100,
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final needsHScroll =
-                                  constraints.maxWidth < _tableMinWidth;
-                              final table = _buildTable();
-
-                              if (!needsHScroll) {
-                                return SingleChildScrollView(child: table);
-                              }
-
-                              return SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: SingleChildScrollView(
-                                  child: SizedBox(
-                                    width: _tableMinWidth,
-                                    child: table,
-                                  ),
-                                ),
-                              );
-                            },
+                      ? _buildEmptyState()
+                      : ReportFullWidthBody(
+                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                          child: ReportTableViewport(
+                            minTableWidth: _tableMinWidth,
+                            header: _headerRow(),
+                            footer: _summary != null
+                                ? _summaryRow()
+                                : const SizedBox.shrink(),
+                            bodyRows: _entries.map(_dataRow).toList(),
                           ),
                         ),
                 ),
@@ -421,26 +412,6 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     );
   }
 
-  Widget _buildTable() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _headerRow(),
-          ..._entries.map(_dataRow),
-          if (_summary != null) _summaryRow(),
-        ],
-      ),
-    );
-  }
-
   Widget _headerRow() {
     return Container(
       color: AppColors.tableHeader,
@@ -466,7 +437,8 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
             flex: 10,
             bold: true,
             alignRight: true,
-            minWidth: 96,
+            minWidth: 72,
+            cellKey: const Key('ledger_grand_total_header'),
           ),
         ],
       ),
@@ -475,20 +447,22 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
 
   Widget _dataRow(LocalLedgerEntry entry) {
     return GestureDetector(
+      key: Key('ledger_row_${entry.billNo}'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _viewBill(entry),
       child: IntrinsicHeight(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          key: Key('ledger_row_flex_${entry.billNo}'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
           _cell('${entry.billNo}', flex: 6),
           _cell(_formatDate(entry.date), flex: 7),
           _cell(entry.customerName, flex: 9),
           _cell(
-            entry.groupSummary.isEmpty ? '—' : entry.groupSummary,
+            LedgerGroupDisplay.formatForDisplay(entry.groupSummary),
             flex: 9,
             minWidth: _groupColumnMinWidth,
-            wrap: true,
+            multiline: true,
           ),
           _cell(entry.mobile.isEmpty ? '—' : entry.mobile, flex: 7),
           _cell(formatPcs(entry.pcs), flex: 5, alignRight: true),
@@ -544,14 +518,24 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
     bool bold = false,
     bool alignRight = false,
     double? minWidth,
-    bool wrap = false,
+    bool multiline = false,
+    Key? cellKey,
   }) {
+    final alignment = alignRight
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
+
     return Expanded(
       flex: flex,
       child: ConstrainedBox(
         constraints: BoxConstraints(minWidth: minWidth ?? 0),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+          key: cellKey,
+          padding: const EdgeInsets.symmetric(
+            horizontal: _cellHPad,
+            vertical: _cellVPad,
+          ),
+          alignment: alignment,
           decoration: const BoxDecoration(
             border: Border(
               right: BorderSide(color: AppColors.border, width: 0.6),
@@ -561,13 +545,16 @@ class _SalesLedgerScreenState extends State<SalesLedgerScreen> {
           child: Text(
             text,
             textAlign: alignRight ? TextAlign.right : TextAlign.left,
-            maxLines: wrap ? 2 : (bold ? 2 : 1),
-            softWrap: wrap || bold,
-            overflow: wrap ? TextOverflow.clip : TextOverflow.visible,
+            maxLines: multiline ? null : (bold ? 2 : 1),
+            softWrap: multiline ? false : bold,
+            overflow: multiline ? TextOverflow.clip : TextOverflow.visible,
             style: TextStyle(
-              fontSize: AppTextSizes.tableRowText,
+              fontSize: bold
+                  ? AppTextSizes.reportTableHeaderText
+                  : AppTextSizes.reportTableRowText,
               fontWeight: bold ? FontWeight.bold : FontWeight.w500,
               color: AppColors.navy,
+              height: multiline ? 1.15 : null,
             ),
           ),
         ),

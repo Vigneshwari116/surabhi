@@ -1,9 +1,9 @@
-/// Single-location Surabhi Exports (offline).
+/// Single-location Surabhi Export (offline).
 const String activeSalesLocationCode = 'main';
 
 const List<String> allLocationCodes = [activeSalesLocationCode];
 
-const String businessDisplayName = 'SURABHI EXPORTS';
+const String businessDisplayName = 'SURABHI EXPORT';
 
 String displayNameForLocationCode(String code) {
   switch (code) {
@@ -18,7 +18,7 @@ String displayNameForLocationCode(String code) {
 String branchLabelForLocationCode(String code) {
   switch (code) {
     case 'main':
-      return 'Surabhi Exports';
+      return 'Surabhi Export';
     default:
       return displayNameForLocationCode(code);
   }

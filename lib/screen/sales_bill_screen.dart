@@ -14,7 +14,9 @@ import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/services/app_session_service.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
 import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 
 import 'bill_item.dart';
@@ -1055,52 +1057,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       }
 
       final int savedBillNo = _billNo;
-
-      String? pdfPath;
-      try {
-        pdfPath = await BillPrintService.saveReceiptPdfToDesktop(bill);
-      } catch (e) {
-        pdfPath = null;
-      }
-
-      final defaultPrinter = await PrinterSettingsService.getDefaultPrinter(
-        PrinterType.thermal,
-      );
-
-      if (defaultPrinter == null || defaultPrinter.isEmpty) {
-        if (pdfPath != null) {
-          _showMessage(
-            'Bill $savedBillNo saved. PDF on Desktop: ${pdfPath.split(Platform.pathSeparator).last}',
-          );
-        } else {
-          _showMessage(
-            'No printer selected. Choose one in PRINTER, or check Desktop for PDF.',
-          );
-        }
-      } else {
-        try {
-          await BillPrintService.printReceipt(
-            bill,
-            printerName: defaultPrinter,
-            type: PrinterType.thermal,
-          );
-          if (pdfPath != null) {
-            _showMessage(
-              'Bill $savedBillNo saved, printed, and PDF saved to Desktop.',
-            );
-          } else {
-            _showMessage('Bill $savedBillNo saved and printed');
-          }
-        } catch (e) {
-          if (pdfPath != null) {
-            _showMessage(
-              'Bill $savedBillNo saved. PDF on Desktop (print failed: $e)',
-            );
-          } else {
-            _showMessage('Bill $savedBillNo saved (print failed: $e)');
-          }
-        }
-      }
+      await _printBillAfterSave(bill, savedBillNo);
 
       if (!mounted) return;
 
@@ -1276,6 +1233,62 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       return value.toInt().toString();
     }
     return value.toStringAsFixed(2);
+  }
+
+  // ============================================================
+  // PRINT (thermal only — no PDF save or preview)
+  // ============================================================
+
+  Future<void> _printBillAfterSave(SaleBill bill, int savedBillNo) async {
+    final savedPrinter =
+        await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal) ??
+            '';
+
+    try {
+      await BillPrintService.printReceipt(
+        bill,
+        printerName: savedPrinter,
+        type: PrinterType.thermal,
+      );
+      if (!mounted) return;
+      _showMessage('Bill $savedBillNo saved and printed');
+    } on BillPrintException {
+      if (!mounted) return;
+      await _showPrinterNotConfiguredDialog();
+      _showMessage('Bill $savedBillNo saved (not printed)');
+    } catch (_) {
+      if (!mounted) return;
+      await _showPrinterNotConfiguredDialog();
+      _showMessage('Bill $savedBillNo saved (not printed)');
+    }
+  }
+
+  Future<void> _showPrinterNotConfiguredDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: const Text(
+          'Printer not found. Choose the thermal printer in Printer settings',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const StaffThermalPrinterScreen(),
+                ),
+              );
+            },
+            child: const Text('Printer settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================

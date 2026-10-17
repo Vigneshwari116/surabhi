@@ -131,7 +131,7 @@ class ReceiptService {
   static _LocationReceiptProfile _locationProfile(String locationCode) {
     return const _LocationReceiptProfile(
       addressLine:
-          'T.10, 3RD FLOOR, LN COMPLEX, OLD THARGUPET, Bangalore',
+          'T.10, 3RD FLOOR, L N COMPLEX, OLD THARGUPET, Bangalore',
     );
   }
 
@@ -219,11 +219,11 @@ class ReceiptService {
 
   static String _itemGstLine(BillItem item) {
     final parts = <String>[
-      'CGST% ${_formatPct(item.cgstPct)}',
-      'SGST% ${_formatPct(item.sgstPct)}',
+      'CGST ${_formatPct(item.cgstPct)}%',
+      'SGST ${_formatPct(item.sgstPct)}%',
     ];
     if (item.igstPct > 0) {
-      parts.add('IGST% ${_formatPct(item.igstPct)}');
+      parts.add('IGST ${_formatPct(item.igstPct)}%');
     }
     return parts.join('  ');
   }

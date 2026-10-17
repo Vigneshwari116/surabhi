@@ -1,11 +1,11 @@
 {
-    "name": "Surabhi Exports",
+    "name": "Surabhi Export",
     "short_name": "Surabhi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#D1001C",
     "theme_color": "#D1001C",
-    "description": "Surabhi Exports offline sales billing.",
+    "description": "Surabhi Export offline sales billing.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

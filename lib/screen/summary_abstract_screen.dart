@@ -5,6 +5,7 @@ import 'package:surabhi/repositories/summary_repository.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/utils/qty_format.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 /// Month-wise and day-wise totals from summary database only.
 class SummaryAbstractScreen extends StatefulWidget {
@@ -93,8 +94,7 @@ class _SummaryAbstractScreenState extends State<SummaryAbstractScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : CenteredContent(
-              maxWidth: 720,
+          : ReportFullWidthBody(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

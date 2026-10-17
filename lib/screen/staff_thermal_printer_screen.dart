@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/thermal_printer_filter.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
-/// Staff printer picker — live OS list of all installed printers.
+/// Staff printer picker — physical printers only (no PDF / virtual).
 class StaffThermalPrinterScreen extends StatefulWidget {
   const StaffThermalPrinterScreen({super.key});
 
@@ -19,12 +20,15 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
   List<Printer> _printers = [];
   String? _selected;
   String? _saved;
-  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  String _printerKey(Printer printer) {
+    return printer.url.isNotEmpty ? printer.url : printer.name;
   }
 
   Future<void> _load() async {
@@ -35,15 +39,16 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
 
     try {
       final all = await Printing.listPrinters();
+      final physical = ThermalPrinterFilter.physicalPrinters(all);
       final saved =
           await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal);
 
       if (!mounted) return;
 
       setState(() {
-        _printers = all;
+        _printers = physical;
         _saved = saved;
-        _selected = _matchSaved(saved, all);
+        _selected = _matchSaved(saved, physical);
         _loading = false;
       });
     } catch (e) {
@@ -58,7 +63,7 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
   String? _matchSaved(String? saved, List<Printer> printers) {
     if (saved == null || saved.isEmpty) return null;
     for (final printer in printers) {
-      final key = printer.url.isNotEmpty ? printer.url : printer.name;
+      final key = _printerKey(printer);
       if (key == saved || printer.name == saved) {
         return key;
       }
@@ -66,26 +71,16 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
     return saved;
   }
 
-  Future<void> _save() async {
-    if (_selected == null || _selected!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a printer first')),
-      );
-      return;
-    }
-
-    setState(() => _saving = true);
+  Future<void> _selectPrinter(String key) async {
+    setState(() => _selected = key);
     await PrinterSettingsService.setDefaultPrinter(
       PrinterType.thermal,
-      _selected!,
+      key,
     );
     if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _saved = _selected;
-    });
+    setState(() => _saved = key);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Printer saved: $_selected')),
+      SnackBar(content: Text('Printer saved: $key')),
     );
   }
 
@@ -110,9 +105,28 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_saved != null && _saved!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Saved printer: $_saved',
+                        style: const TextStyle(
+                          fontSize: AppTextSizes.listTitle,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   const Text(
-                    'All printers installed on this computer (live OS list). '
-                    'Select the printer you want to use for bills and receipts.',
+                    'Choose the thermal printer for bills. Virtual printers '
+                    '(PDF, XPS, Fax) are hidden.',
                     style: TextStyle(fontSize: AppTextSizes.listSubtitle),
                   ),
                   if (_error != null) ...[
@@ -126,15 +140,15 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
                   Expanded(
                     child: _printers.isEmpty
                         ? const Center(
-                            child: Text('No printers detected on this system.'),
+                            child: Text(
+                              'No physical printers detected on this system.',
+                            ),
                           )
                         : ListView.builder(
                             itemCount: _printers.length,
                             itemBuilder: (context, index) {
                               final printer = _printers[index];
-                              final key = printer.url.isNotEmpty
-                                  ? printer.url
-                                  : printer.name;
+                              final key = _printerKey(printer);
                               return RadioListTile<String>(
                                 title: Text(printer.name),
                                 subtitle: printer.url.isNotEmpty
@@ -148,28 +162,12 @@ class _StaffThermalPrinterScreenState extends State<StaffThermalPrinterScreen> {
                                 value: key,
                                 groupValue: _selected,
                                 onChanged: (value) {
-                                  setState(() => _selected = value);
+                                  if (value == null) return;
+                                  _selectPrinter(value);
                                 },
                               );
                             },
                           ),
-                  ),
-                  if (_saved != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Current: $_saved',
-                      style: const TextStyle(fontSize: AppTextSizes.listSubtitle),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    key: const Key('staff_save_thermal_printer'),
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.navy,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text(_saving ? 'SAVING...' : 'SAVE PRINTER'),
                   ),
                 ],
               ),

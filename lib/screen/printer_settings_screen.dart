@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/theme/app_theme.dart';
+import 'package:surabhi/utils/thermal_printer_filter.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
@@ -18,9 +19,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   final Map<PrinterType, String?> _savedPrinters = {};
   final Map<PrinterType, String?> _selectedPrinters = {};
-  final Map<PrinterType, bool> _saving = {
-    for (final type in PrinterType.values) type: false,
-  };
 
   @override
   void initState() {
@@ -35,7 +33,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     });
 
     try {
-      final printers = await Printing.listPrinters();
+      final all = await Printing.listPrinters();
+      final printers = ThermalPrinterFilter.physicalPrinters(all);
 
       for (final type in PrinterType.values) {
         final saved = await PrinterSettingsService.getDefaultPrinter(type);
@@ -74,28 +73,16 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     return saved;
   }
 
-  Future<void> _saveSelection(PrinterType type) async {
-    final selected = _selectedPrinters[type];
-    if (selected == null || selected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Select a ${type.label.toLowerCase()} printer first')),
-      );
-      return;
-    }
-
-    setState(() => _saving[type] = true);
-
-    await PrinterSettingsService.setDefaultPrinter(type, selected);
+  Future<void> _selectPrinter(PrinterType type, String key) async {
+    setState(() => _selectedPrinters[type] = key);
+    await PrinterSettingsService.setDefaultPrinter(type, key);
 
     if (!mounted) return;
 
-    setState(() {
-      _savedPrinters[type] = selected;
-      _saving[type] = false;
-    });
+    setState(() => _savedPrinters[type] = key);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${type.label} printer saved: $selected')),
+      SnackBar(content: Text('${type.label} printer saved: $key')),
     );
   }
 
@@ -154,7 +141,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   Widget _buildTypeSection(PrinterType type) {
     final saved = _savedPrinters[type];
     final selected = _selectedPrinters[type];
-    final saving = _saving[type] ?? false;
 
     return Container(
       decoration: BoxDecoration(
@@ -182,17 +168,17 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               children: [
                 Text(
                   saved != null && saved.isNotEmpty
-                      ? 'Current: $saved'
+                      ? 'Saved printer: $saved'
                       : 'No ${type.label.toLowerCase()} printer selected',
                   style: const TextStyle(
                     fontSize: AppTextSizes.listTitle,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
                 if (_printers.isEmpty)
                   const Text(
-                    'No printers found on this system.',
+                    'No physical printers found on this system.',
                     style: TextStyle(fontSize: AppTextSizes.listTitle),
                   )
                 else
@@ -205,7 +191,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       onChanged: (value) {
-                        setState(() => _selectedPrinters[type] = value);
+                        if (value != null) {
+                          _selectPrinter(type, value);
+                        }
                       },
                       title: Text(
                         _printerLabel(printer),
@@ -221,28 +209,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           : null,
                     );
                   }),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: saving ? null : () => _saveSelection(type),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.navy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          'SAVE ${type.settingsTitle}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                ),
               ],
             ),
           ),

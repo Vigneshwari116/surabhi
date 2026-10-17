@@ -34,7 +34,7 @@ class SalesBillApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Surabhi Exports',
+      title: 'Surabhi Export',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
       home: const AppRoot(),
