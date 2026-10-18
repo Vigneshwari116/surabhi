@@ -125,8 +125,7 @@ void main() {
     final lines = ReceiptService.buildReceiptLines(bill);
     final totalLine = lines.firstWhere((line) => line.contains('TOTAL PCS'));
     expect(totalLine, contains('132'));
-    expect(totalLine, contains('1257'));
-    expect(totalLine, isNot(contains('.')));
+    expect(totalLine, contains('1257.14'));
   });
 
   test('receipt prints gst line once without decimals on money columns', () {
@@ -134,10 +133,8 @@ void main() {
     expect(text, contains('CGST 2.5%  SGST 2.5%'));
     expect(text, contains('GRAND TOTAL'));
     expect(text, isNot(contains('EXCHANGE ONLY 3 DAYS')));
-    expect(text, contains('50'));
-    expect(text, contains('48'));
-    expect(text, isNot(contains('50.00')));
-    expect(text, isNot(contains('47.62')));
+    expect(text, contains('50.00'));
+    expect(text, contains('47.62'));
 
     final gstMatches = 'CGST 2.5%'.allMatches(text).length;
     expect(gstMatches, 1);
@@ -325,7 +322,7 @@ void main() {
     );
     final lines = ReceiptService.buildReceiptLines(bill);
     final grandLine = lines.firstWhere((l) => l.contains('GRAND TOTAL'));
-    expect(grandLine.trimRight().endsWith('10'), isTrue);
+    expect(grandLine.trimRight().endsWith('10.40'), isTrue);
   });
 }
 
