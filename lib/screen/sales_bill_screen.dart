@@ -137,7 +137,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
   static const double _gridFrameHeight =
       _tableHeaderHeight + _gridBodyScrollZoneHeight + _gridFooterHeight;
   static const double _bottomBarHeight = 44;
-  static const double _desktopChromeEstimate = 320;
+  static const double _desktopChromeEstimate = 268;
   static const double _entryValidationSlack = 28;
   static const double _gridMinScrollHeight = _gridFrameHeight;
   static const double _todaySalesFrameWidth = 268;
@@ -1707,8 +1707,6 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                     ),
                   ),
                 ),
-              const SizedBox(height: 4),
-              _buildSaveSaleBar(),
             ],
           );
         }
@@ -1927,53 +1925,31 @@ class _SalesBillScreenState extends State<SalesBillScreen>
     }
   }
 
-  Widget _buildSaveSaleBar() {
-    return SizedBox(
-      height: _bottomBarHeight,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(6),
-            child: SizedBox(
-              height: _bottomBarHeight,
-              child: ElevatedButton(
-                key: const Key('save_sale_bar_button'),
-                focusNode: _saveSaleFocus,
-                onPressed: _saveBill,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.navy,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  minimumSize:
-                      const Size(_topButtonWidth, _bottomBarHeight),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: const TextStyle(
-                    fontSize: _normalFontSize,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                child: const Text('SAVE SALE'),
-              ),
+  Widget _buildSaveSaleButton() {
+    return FocusTraversalOrder(
+      order: const NumericFocusOrder(6),
+      child: SizedBox(
+        width: _topButtonWidth,
+        height: _topButtonHeight,
+        child: ElevatedButton(
+          key: const Key('save_sale_bar_button'),
+          focusNode: _saveSaleFocus,
+          onPressed: _busy ? null : _saveBill,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.navy,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            minimumSize: const Size(_topButtonWidth, _topButtonHeight),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: const TextStyle(
+              fontSize: _normalFontSize,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
             ),
           ),
-          if (_particularError != null) ...[
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _particularError!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.danger,
-                  fontSize: AppTextSizes.listSubtitle,
-                ),
-              ),
-            ),
-          ],
-        ],
+          child: const Text('SAVE SALE'),
+        ),
       ),
     );
   }
@@ -1990,8 +1966,6 @@ class _SalesBillScreenState extends State<SalesBillScreen>
             _buildTopArea(),
             const SizedBox(height: _topAreaGap),
             _buildItemTableSection(mobile: true),
-            const SizedBox(height: _topAreaGap),
-            _buildSaveSaleBar(),
           ],
         ),
       ),
@@ -2085,6 +2059,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                   onPressed: _goToNextBill,
                 ),
               ),
+              _buildSaveSaleButton(),
             ],
           ),
           const SizedBox(height: _topAreaGap),
@@ -2925,6 +2900,18 @@ class _SalesBillScreenState extends State<SalesBillScreen>
           style: const TextStyle(
             color: AppColors.danger,
             fontSize: _normalFontSize,
+          ),
+        ),
+      ],
+      if (_particularError != null) ...[
+        const SizedBox(height: 4),
+        Text(
+          _particularError!,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.danger,
+            fontSize: AppTextSizes.listSubtitle,
           ),
         ),
       ],
