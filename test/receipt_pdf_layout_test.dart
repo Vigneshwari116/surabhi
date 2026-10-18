@@ -197,16 +197,16 @@ void main() {
 
     final totalPcs = lines.firstWhere((l) => l.contains('TOTAL PCS'));
     final cgst = lines.firstWhere(
-      (l) => l.trimLeft().startsWith('CGST') && !l.contains('%'),
+      (l) => l.trimLeft().startsWith('CGST'),
     );
     final sgst = lines.firstWhere(
-      (l) => l.trimLeft().startsWith('SGST') && !l.contains('%'),
+      (l) => l.trimLeft().startsWith('SGST'),
     );
     final grand = lines.firstWhere((l) => l.trimLeft().startsWith('GRAND TOTAL'));
 
     expect(totalPcs.trimRight(), endsWith('2666.66'));
-    expect(ReceiptService.footerAmountAfterLabel(cgst, 'CGST'), '66.67');
-    expect(ReceiptService.footerAmountAfterLabel(sgst, 'SGST'), '66.67');
+    expect(ReceiptService.footerAmountAfterLabel(cgst, 'CGST 2.5%'), '66.67');
+    expect(ReceiptService.footerAmountAfterLabel(sgst, 'SGST 2.5%'), '66.67');
     expect(
       ReceiptService.footerAmountAfterLabel(grand, 'GRAND TOTAL'),
       '2800.00',
