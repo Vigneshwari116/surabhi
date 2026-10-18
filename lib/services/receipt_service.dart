@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
@@ -340,6 +341,19 @@ class ReceiptService {
       return label.substring(0, maxLen);
     }
     return label;
+  }
+
+  /// Amount text after a footer label on a receipt line (for PDF emphasis rows).
+  static String? footerAmountAfterLabel(String line, String label) {
+    final trimmed = line.trimLeft();
+    if (!trimmed.startsWith(label)) {
+      return null;
+    }
+    final rest = trimmed.substring(label.length).trimLeft();
+    if (rest.isEmpty) {
+      return null;
+    }
+    return rest.trim();
   }
 
   static String _fieldLine(String label, String value) {

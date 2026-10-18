@@ -357,14 +357,29 @@ class BillPrintService {
   }
 
   static String? _grandTotalAmount(String line) {
-    if (!line.trimLeft().startsWith('GRAND TOTAL')) {
-      return null;
-    }
-    final trimmed = line.trimRight();
-    if (trimmed.length < ReceiptLayout.amountWidth) {
-      return null;
-    }
-    return trimmed.substring(trimmed.length - ReceiptLayout.amountWidth).trim();
+    return ReceiptService.footerAmountAfterLabel(line, 'GRAND TOTAL');
+  }
+
+  /// PDF grand-total row font sizes and amount for layout tests.
+  @visibleForTesting
+  static ({double labelPt, double amountPt, String amountText})
+      grandTotalPdfLayoutForBill(SaleBill bill) {
+    final line = ReceiptService.buildReceiptLines(bill)
+        .firstWhere((l) => l.trimLeft().startsWith('GRAND TOTAL'));
+    final amountText = _grandTotalAmount(line)!;
+    final fonts = ReceiptLayout.grandTotalFontSizes(amountText);
+    return (
+      labelPt: fonts.labelPt,
+      amountPt: fonts.amountPt,
+      amountText: amountText,
+    );
+  }
+
+  @visibleForTesting
+  static double grandTotalPdfLineWidthMm(String amountText, double labelPt, double amountPt) {
+    return ReceiptLayout.textWidthMm('GRAND TOTAL', labelPt) +
+        ReceiptLayout.grandTotalLabelAmountGapMm +
+        ReceiptLayout.textWidthMm(amountText, amountPt);
   }
 
   static Future<Uint8List> _buildPdfBytesFromLayout(
@@ -432,6 +447,39 @@ class BillPrintService {
     final grandTotalAmount = _grandTotalAmount(line);
     if (grandTotalAmount != null) {
       final fonts = ReceiptLayout.grandTotalFontSizes(grandTotalAmount);
+      final lineWidthMm = grandTotalPdfLineWidthMm(
+        grandTotalAmount,
+        fonts.labelPt,
+        fonts.amountPt,
+      );
+      final useTwoLines = lineWidthMm > printableWidthMm;
+      if (useTwoLines) {
+        return pw.SizedBox(
+          width: boxWidth,
+          height: boxHeight,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Text(
+                'GRAND TOTAL',
+                style: baseStyle.copyWith(fontSize: fonts.labelPt),
+                maxLines: 1,
+                softWrap: false,
+              ),
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text(
+                  grandTotalAmount,
+                  style: baseStyle.copyWith(fontSize: fonts.amountPt),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return pw.SizedBox(
         width: boxWidth,
         height: boxHeight,
@@ -439,13 +487,25 @@ class BillPrintService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(
-              'GRAND TOTAL',
-              style: baseStyle.copyWith(fontSize: fonts.labelPt),
+            pw.Flexible(
+              child: pw.Text(
+                'GRAND TOTAL',
+                style: baseStyle.copyWith(fontSize: fonts.labelPt),
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
-            pw.Text(
-              grandTotalAmount,
-              style: baseStyle.copyWith(fontSize: fonts.amountPt),
+            pw.SizedBox(width: ReceiptLayout.grandTotalLabelAmountGapMm * PdfPageFormat.mm),
+            pw.Flexible(
+              child: pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text(
+                  grandTotalAmount,
+                  style: baseStyle.copyWith(fontSize: fonts.amountPt),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
+              ),
             ),
           ],
         ),
