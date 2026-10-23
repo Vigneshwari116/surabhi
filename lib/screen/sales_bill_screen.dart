@@ -120,7 +120,6 @@ class _SalesBillScreenState extends State<SalesBillScreen>
       _gridFooterTotalRowHeight + _gridFooterGrandRowHeight;
   static const double _grandTotalLabelFontSize = 20;
   static const double _grandTotalValueFontSize = 28;
-  static const double _grandTotalWordsFontSize = 13;
   static const double _deleteColWidth = 48;
   static const double _entryBlockWidth =
       _groupBoxWidth + (_entryColumnGap * 3) + (_numericBoxWidth * 3);
@@ -3395,66 +3394,51 @@ class _SalesBillScreenState extends State<SalesBillScreen>
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 SizedBox(
-                  width: primary,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      'GRAND TOTAL',
-                      style: const TextStyle(
-                        fontSize: _grandTotalLabelFontSize,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.navy,
+                  width: _gridViewportWidth,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            words,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: _amountInWordsFontSize,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.mutedBlue,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: primary),
-                SizedBox(width: primary),
-                SizedBox(width: primary),
-                SizedBox(
-                  width: primary,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        SizedBox(
-                          height: 30,
-                          child: Align(
-                            alignment: Alignment.bottomRight,
-                            child: Text(
-                              _formatAmount(_grandTotal),
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: _grandTotalValueFontSize,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.navy,
-                                height: 1,
-                              ),
+                      Text(
+                        'GRAND',
+                        style: const TextStyle(
+                          fontSize: _grandTotalLabelFontSize,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: primary,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            _formatAmount(_grandTotal),
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: _grandTotalValueFontSize,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.navy,
+                              height: 1,
                             ),
                           ),
                         ),
-                        SizedBox(
-                          height: 28,
-                          child: Align(
-                            alignment: Alignment.topRight,
-                            child: Text(
-                              words,
-                              maxLines: 2,
-                              textAlign: TextAlign.right,
-                              softWrap: true,
-                              style: const TextStyle(
-                                fontSize: _grandTotalWordsFontSize,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.mutedBlue,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 SizedBox(width: _deleteColWidth),
