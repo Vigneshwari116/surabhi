@@ -3401,14 +3401,17 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                       Flexible(
                         child: Padding(
                           padding: const EdgeInsets.only(left: 8),
-                          child: Text(
-                            words,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: _amountInWordsFontSize,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.mutedBlue,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              words,
+                              softWrap: false,
+                              style: const TextStyle(
+                                fontSize: _amountInWordsFontSize,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.mutedBlue,
+                              ),
                             ),
                           ),
                         ),

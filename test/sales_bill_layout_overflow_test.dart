@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/screen/number%20to%20words.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/services/sync_service.dart';
@@ -213,6 +214,27 @@ void main() {
 
     expect(find.byKey(const Key('today_sales_panel')), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'grand total amount in words scales down without ellipsis for large totals',
+      (tester) async {
+    for (final total in [78565.00, 999999.00]) {
+      final items = [
+        BillItem(particular: 'LARGE TOTAL', qty: 1, rate: total),
+      ];
+
+      await pumpSalesBillDesktop(tester, items: items);
+
+      final words = amountInWords(total).toUpperCase();
+      expect(find.text(words), findsOneWidget);
+      expect(find.textContaining('...'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
 
     await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
