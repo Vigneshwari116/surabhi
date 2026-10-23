@@ -3398,7 +3398,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Flexible(
+                      Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(left: 8),
                           child: FittedBox(
@@ -3416,6 +3416,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         'GRAND',
                         style: const TextStyle(

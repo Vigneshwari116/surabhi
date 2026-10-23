@@ -30,20 +30,26 @@ class _FakePathProvider extends Fake
 
 const _testLocationCode = 'main';
 
+Finder _gridAmountHeaderFinder() {
+  final amountHeaders = find.text('AMOUNT');
+  if (amountHeaders.evaluate().length == 1) {
+    return amountHeaders;
+  }
+
+  return find.descendant(
+    of: find.ancestor(
+      of: find.text('S.NO'),
+      matching: find.byType(ColoredBox),
+    ).first,
+    matching: find.text('AMOUNT'),
+  );
+}
+
 void _expectGrandTotalAmountAlignsWithAmountColumn(
   WidgetTester tester,
   List<BillItem> items,
 ) {
-  final gridHeaderRow = find.ancestor(
-    of: find.text('S.NO'),
-    matching: find.byType(Row),
-  );
-  expect(gridHeaderRow, findsOneWidget);
-
-  final amountHeader = find.descendant(
-    of: gridHeaderRow,
-    matching: find.text('AMOUNT'),
-  );
+  final amountHeader = _gridAmountHeaderFinder();
   expect(amountHeader, findsOneWidget);
 
   final amountColumnRect = tester.getRect(
@@ -73,7 +79,7 @@ void _expectGrandTotalAmountAlignsWithAmountColumn(
   final grandAmountColumnRect = tester.getRect(
     find.ancestor(
       of: grandAmount,
-      matching: find.widgetPredicate(
+      matching: find.byWidgetPredicate(
         (widget) => widget is SizedBox && widget.width != null,
       ),
     ).first,
@@ -220,24 +226,35 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
   });
 
-  testWidgets(
-      'grand total amount in words scales down without ellipsis for large totals',
-      (tester) async {
-    for (final total in [78565.00, 999999.00]) {
-      final items = [
-        BillItem(particular: 'LARGE TOTAL', qty: 1, rate: total),
-      ];
+  Future<void> _expectLargeGrandTotalWords(
+    WidgetTester tester,
+    double total,
+  ) async {
+    final items = [
+      BillItem(particular: 'LARGE TOTAL', qty: 1, rate: total),
+    ];
 
-      await pumpSalesBillDesktop(tester, items: items);
+    await pumpSalesBillDesktop(tester, items: items);
 
-      final words = amountInWords(total).toUpperCase();
-      expect(find.text(words), findsOneWidget);
-      expect(find.textContaining('...'), findsNothing);
-      expect(tester.takeException(), isNull);
-    }
+    final words = amountInWords(total).toUpperCase();
+    expect(find.text(words), findsOneWidget);
+    expect(find.textContaining('...'), findsNothing);
+    expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
+  }
+
+  testWidgets(
+      'grand total amount in words scales down without ellipsis at 78565.00',
+      (tester) async {
+    await _expectLargeGrandTotalWords(tester, 78565.00);
+  });
+
+  testWidgets(
+      'grand total amount in words scales down without ellipsis at 999999.00',
+      (tester) async {
+    await _expectLargeGrandTotalWords(tester, 999999.00);
   });
 }
