@@ -14,6 +14,7 @@ import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/services/sync_service.dart';
+import 'package:surabhi/utils/money_format.dart';
 
 class _FakePathProvider extends Fake
     with MockPlatformInterfaceMixin
@@ -27,6 +28,64 @@ class _FakePathProvider extends Fake
 }
 
 const _testLocationCode = 'main';
+
+void _expectGrandTotalAmountAlignsWithAmountColumn(
+  WidgetTester tester,
+  List<BillItem> items,
+) {
+  final gridHeaderRow = find.ancestor(
+    of: find.text('S.NO'),
+    matching: find.byType(Row),
+  );
+  expect(gridHeaderRow, findsOneWidget);
+
+  final amountHeader = find.descendant(
+    of: gridHeaderRow,
+    matching: find.text('AMOUNT'),
+  );
+  expect(amountHeader, findsOneWidget);
+
+  final amountColumnRect = tester.getRect(
+    find.ancestor(
+      of: amountHeader,
+      matching: find.byType(Container),
+    ).first,
+  );
+
+  final grandTotal = items.fold<double>(
+    0,
+    (sum, item) => sum + item.netAmt,
+  );
+  final grandTotalText = formatMoneyAmount(grandTotal);
+
+  final grandInnerRow = find.ancestor(
+    of: find.text('GRAND'),
+    matching: find.byType(Row),
+  ).at(0);
+
+  final grandAmount = find.descendant(
+    of: grandInnerRow,
+    matching: find.text(grandTotalText),
+  );
+  expect(grandAmount, findsOneWidget);
+
+  final grandAmountColumnRect = tester.getRect(
+    find.ancestor(
+      of: grandAmount,
+      matching: find.widgetPredicate(
+        (widget) => widget is SizedBox && widget.width != null,
+      ),
+    ).first,
+  );
+
+  expect(
+    grandAmountColumnRect.right,
+    closeTo(amountColumnRect.right, 0.01),
+    reason:
+        'grand total amount column right=${grandAmountColumnRect.right} '
+        'AMOUNT column right=${amountColumnRect.right}',
+  );
+}
 
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
@@ -102,7 +161,7 @@ void main() {
     for (var i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (find.text('BILL NO:').evaluate().isNotEmpty &&
-          find.text('GRAND TOTAL').evaluate().isNotEmpty &&
+          find.text('GRAND').evaluate().isNotEmpty &&
           find.byIcon(Icons.close).evaluate().length >= items.length) {
         break;
       }
@@ -122,7 +181,9 @@ void main() {
     await pumpSalesBillDesktop(tester, items: items);
 
     expect(find.text('BILL NO:'), findsOneWidget);
+    expect(find.text('GRAND'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNWidgets(3));
+    _expectGrandTotalAmountAlignsWithAmountColumn(tester, items);
     expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();
