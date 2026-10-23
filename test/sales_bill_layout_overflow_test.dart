@@ -11,9 +11,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/screen/number%20to%20words.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/services/sync_service.dart';
+import 'package:surabhi/utils/money_format.dart';
 
 class _FakePathProvider extends Fake
     with MockPlatformInterfaceMixin
@@ -27,6 +29,70 @@ class _FakePathProvider extends Fake
 }
 
 const _testLocationCode = 'main';
+
+Finder _gridAmountHeaderFinder() {
+  final amountHeaders = find.text('AMOUNT');
+  if (amountHeaders.evaluate().length == 1) {
+    return amountHeaders;
+  }
+
+  return find.descendant(
+    of: find.ancestor(
+      of: find.text('S.NO'),
+      matching: find.byType(ColoredBox),
+    ).first,
+    matching: find.text('AMOUNT'),
+  );
+}
+
+void _expectGrandTotalAmountAlignsWithAmountColumn(
+  WidgetTester tester,
+  List<BillItem> items,
+) {
+  final amountHeader = _gridAmountHeaderFinder();
+  expect(amountHeader, findsOneWidget);
+
+  final amountColumnRect = tester.getRect(
+    find.ancestor(
+      of: amountHeader,
+      matching: find.byType(Container),
+    ).first,
+  );
+
+  final grandTotal = items.fold<double>(
+    0,
+    (sum, item) => sum + item.netAmt,
+  );
+  final grandTotalText = formatMoneyAmount(grandTotal);
+
+  final grandInnerRow = find.ancestor(
+    of: find.text('GRAND'),
+    matching: find.byType(Row),
+  ).at(0);
+
+  final grandAmount = find.descendant(
+    of: grandInnerRow,
+    matching: find.text(grandTotalText),
+  );
+  expect(grandAmount, findsOneWidget);
+
+  final grandAmountColumnRect = tester.getRect(
+    find.ancestor(
+      of: grandAmount,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is SizedBox && widget.width != null,
+      ),
+    ).first,
+  );
+
+  expect(
+    grandAmountColumnRect.right,
+    closeTo(amountColumnRect.right, 0.01),
+    reason:
+        'grand total amount column right=${grandAmountColumnRect.right} '
+        'AMOUNT column right=${amountColumnRect.right}',
+  );
+}
 
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
@@ -102,7 +168,7 @@ void main() {
     for (var i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (find.text('BILL NO:').evaluate().isNotEmpty &&
-          find.text('GRAND TOTAL').evaluate().isNotEmpty &&
+          find.text('GRAND').evaluate().isNotEmpty &&
           find.byIcon(Icons.close).evaluate().length >= items.length) {
         break;
       }
@@ -122,7 +188,9 @@ void main() {
     await pumpSalesBillDesktop(tester, items: items);
 
     expect(find.text('BILL NO:'), findsOneWidget);
+    expect(find.text('GRAND'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNWidgets(3));
+    _expectGrandTotalAmountAlignsWithAmountColumn(tester, items);
     expect(tester.takeException(), isNull);
 
     await SyncService.resetForTesting();
@@ -156,5 +224,37 @@ void main() {
     await SyncService.resetForTesting();
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump(const Duration(seconds: 11));
+  });
+
+  Future<void> _expectLargeGrandTotalWords(
+    WidgetTester tester,
+    double total,
+  ) async {
+    final items = [
+      BillItem(particular: 'LARGE TOTAL', qty: 1, rate: total),
+    ];
+
+    await pumpSalesBillDesktop(tester, items: items);
+
+    final words = amountInWords(total).toUpperCase();
+    expect(find.text(words), findsOneWidget);
+    expect(find.textContaining('...'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await SyncService.resetForTesting();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  }
+
+  testWidgets(
+      'grand total amount in words scales down without ellipsis at 78565.00',
+      (tester) async {
+    await _expectLargeGrandTotalWords(tester, 78565.00);
+  });
+
+  testWidgets(
+      'grand total amount in words scales down without ellipsis at 999999.00',
+      (tester) async {
+    await _expectLargeGrandTotalWords(tester, 999999.00);
   });
 }
