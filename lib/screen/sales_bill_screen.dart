@@ -3398,34 +3398,33 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          'GRAND',
+                          style: const TextStyle(
+                            fontSize: _grandTotalLabelFontSize,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.navy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              words,
-                              softWrap: false,
-                              style: const TextStyle(
-                                fontSize: _amountInWordsFontSize,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.mutedBlue,
-                              ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            words,
+                            softWrap: false,
+                            style: const TextStyle(
+                              fontSize: _amountInWordsFontSize,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.mutedBlue,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'GRAND',
-                        style: const TextStyle(
-                          fontSize: _grandTotalLabelFontSize,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.navy,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
                       SizedBox(
                         width: primary,
                         child: Padding(
