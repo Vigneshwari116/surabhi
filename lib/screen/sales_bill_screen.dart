@@ -1482,6 +1482,28 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           required bool expandGrid,
           double? gridHeight,
         }) {
+          final gridZone = expandGrid
+              ? Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: _gridTotalWidth,
+                        child: _buildDesktopGridZone(
+                          gridFontSize: gridFontSize,
+                          expandBody: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : SizedBox(
+                  height: gridHeight ?? _gridFrameHeight,
+                  child: _buildDesktopGridZone(
+                    gridFontSize: gridFontSize,
+                  ),
+                );
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1493,12 +1515,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 menuContext: context,
               ),
               const SizedBox(height: _topAreaGap),
-              SizedBox(
-                height: _gridFrameHeight,
-                child: _buildDesktopGridZone(
-                  gridFontSize: gridFontSize,
-                ),
-              ),
+              gridZone,
               const SizedBox(height: _topAreaGap),
               _buildSaveSaleBar(),
             ],
@@ -2762,17 +2779,23 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildDesktopGridZone({
     required double gridFontSize,
+    bool expandBody = false,
   }) {
     final showTax = _items.isNotEmpty;
     return Align(
       alignment: Alignment.topLeft,
-      child: _buildGridFrame(showTax: showTax, gridFontSize: gridFontSize),
+      child: _buildGridFrame(
+        showTax: showTax,
+        gridFontSize: gridFontSize,
+        expandBody: expandBody,
+      ),
     );
   }
 
   Widget _buildGridFrame({
     required bool showTax,
     required double gridFontSize,
+    bool expandBody = false,
   }) {
     final scrollWidth = _leftGridScrollWidth(showTax);
 
@@ -2783,64 +2806,67 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     Widget horizontalBody = SizedBox(
       width: scrollWidth,
-      height: _gridBodyHeight,
+      height: expandBody ? null : _gridBodyHeight,
       child: _buildItemRowsList(showTax, gridFontSize, scrollWidth),
+    );
+
+    final gridBody = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: _gridViewportWidth,
+          child: Scrollbar(
+            controller: _gridHScrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _gridHScrollController,
+              scrollDirection: Axis.horizontal,
+              child: horizontalBody,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: _deleteColWidth,
+          child: ColoredBox(
+            color: AppColors.background,
+            child: _buildDeleteRowsList(),
+          ),
+        ),
+      ],
+    );
+
+    final frameColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: _gridViewportWidth,
+              child: SingleChildScrollView(
+                controller: _gridHeaderHScrollController,
+                scrollDirection: Axis.horizontal,
+                child: horizontalHeader,
+              ),
+            ),
+            _tableDeleteHeaderCell(),
+          ],
+        ),
+        if (expandBody) Expanded(child: gridBody) else SizedBox(height: _gridBodyHeight, child: gridBody),
+        _buildFixedGridFooter(gridFontSize),
+      ],
     );
 
     return SizedBox(
       width: _gridTotalWidth,
-      height: _gridFrameHeight,
+      height: expandBody ? null : _gridFrameHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardWhite,
           border: Border.all(color: AppColors.border),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: _gridViewportWidth,
-                  child: SingleChildScrollView(
-                    controller: _gridHeaderHScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: horizontalHeader,
-                  ),
-                ),
-                _tableDeleteHeaderCell(),
-              ],
-            ),
-            SizedBox(
-              height: _gridBodyHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _gridViewportWidth,
-                    child: Scrollbar(
-                      controller: _gridHScrollController,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _gridHScrollController,
-                        scrollDirection: Axis.horizontal,
-                        child: horizontalBody,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: _deleteColWidth,
-                    height: _gridBodyHeight,
-                    child: _buildDeleteRowsList(),
-                  ),
-                ],
-              ),
-            ),
-            _buildFixedGridFooter(gridFontSize),
-          ],
-        ),
+        child: frameColumn,
       ),
     );
   }
@@ -2975,6 +3001,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       width: _deleteColWidth,
       height: _tableHeaderHeight,
       decoration: BoxDecoration(
+        color: AppColors.tableHeader,
         border: Border(
           left: BorderSide(color: AppColors.border, width: 0.6),
         ),
@@ -3150,7 +3177,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       child: Container(
         height: _tableRowHeight,
         decoration: BoxDecoration(
+          color: AppColors.background,
           border: Border(
+            left: BorderSide(color: AppColors.border, width: 0.6),
             bottom: BorderSide(color: AppColors.border, width: 0.6),
           ),
         ),
