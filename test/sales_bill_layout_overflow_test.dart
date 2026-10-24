@@ -29,6 +29,12 @@ class _FakePathProvider extends Fake
 
 const _testLocationCode = 'main';
 
+/// Matches [_SalesBillScreenState._gridFooterGrandRowHeight].
+const _grandRowHeight = 48.0;
+
+/// Body bottom inset; allows one device pixel for grid border painting.
+const _maxGrandRowInsetFromBodyBottom = 9.0;
+
 Future<void> _deleteTestDb() async {
   final dir = await getApplicationSupportDirectory();
   final file = File('${dir.path}/main_sales.db');
@@ -99,16 +105,25 @@ void main() {
     return text.style?.fontSize ?? 0;
   }
 
+  double grandRowBottom(WidgetTester tester) {
+    final grandText = tester.getRect(find.text('GRAND TOTAL'));
+    return grandText.center.dy + _grandRowHeight / 2;
+  }
+
+  void expectGrandRowNearBodyBottom(WidgetTester tester) {
+    final bodyBottom = tester.getRect(find.byType(Scaffold)).bottom;
+    expect(
+      bodyBottom - grandRowBottom(tester),
+      lessThanOrEqualTo(_maxGrandRowInsetFromBodyBottom),
+    );
+  }
+
   void expectRow10AboveHorizontalScrollbar(WidgetTester tester) {
     final row10 = find.text('ITEM 10');
     expect(row10, findsOneWidget);
     final rowBottom = tester.getRect(row10).bottom;
-    final scrollbarRect = tester.getRect(find.byType(Scrollbar).first);
-    const gridBodyHeight = 22.0 * 10;
-    expect(
-      rowBottom,
-      lessThanOrEqualTo(scrollbarRect.top + gridBodyHeight + 1),
-    );
+    final footerTop = tester.getRect(find.text('Total')).top;
+    expect(rowBottom, lessThan(footerTop));
   }
 
   Future<void> showRateValidationError(WidgetTester tester) async {
@@ -194,6 +209,7 @@ void main() {
 
     expect(find.text('BILL NO:'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNWidgets(3));
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -221,6 +237,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
     expect(find.byKey(const Key('today_sales_panel')), findsOneWidget);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -228,14 +245,14 @@ void main() {
   });
 
   testWidgets(
-      'sales bill shows 10 grid rows without vertical scroll at 1366x768',
+      'sales bill pins grand row near body bottom at 1366x768 with 10 items',
       (tester) async {
     await pumpSalesBillDesktop(tester, items: billItems(10));
 
     for (var serial = 1; serial <= 10; serial++) {
       expect(find.text('$serial'), findsWidgets);
     }
-    expect(maxVerticalListScrollExtent(tester), 0);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -243,7 +260,7 @@ void main() {
   });
 
   testWidgets(
-      'sales bill shows 10 grid rows with sidebar open at 1366x768',
+      'sales bill pins grand row with sidebar open at 1366x768',
       (tester) async {
     await pumpSalesBillDesktop(
       tester,
@@ -251,10 +268,7 @@ void main() {
       sidebarOpen: true,
     );
 
-    for (var serial = 1; serial <= 10; serial++) {
-      expect(find.text('$serial'), findsWidgets);
-    }
-    expect(maxVerticalListScrollExtent(tester), 0);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -262,20 +276,26 @@ void main() {
   });
 
   testWidgets(
-      'sales bill grid scrolls internally with more than 10 items at 1366x768',
+      'sales bill grid scrolls with 15 items while total rows stay pinned at 1366x768',
       (tester) async {
-    await pumpSalesBillDesktop(tester, items: billItems(11));
+    await pumpSalesBillDesktop(tester, items: billItems(15));
 
     expect(maxVerticalListScrollExtent(tester), greaterThan(0));
+    expect(find.text('Total'), findsOneWidget);
+    expect(find.text('GRAND TOTAL'), findsOneWidget);
+    expectGrandRowNearBodyBottom(tester);
 
     final verticalList = find.byWidgetPredicate(
       (widget) =>
           widget is ListView && widget.scrollDirection == Axis.vertical,
     );
-    await tester.drag(verticalList.first, const Offset(0, -80));
+    await tester.drag(verticalList.first, const Offset(0, -120));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    expect(find.text('11'), findsWidgets);
+    expect(find.text('15'), findsWidgets);
+    expect(find.text('Total'), findsOneWidget);
+    expect(find.text('GRAND TOTAL'), findsOneWidget);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -291,6 +311,7 @@ void main() {
     );
 
     expect(find.text(formatMoneyAmount(7067)), findsWidgets);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -306,6 +327,7 @@ void main() {
     );
 
     expect(find.text(formatMoneyAmount(1234567)), findsWidgets);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
@@ -336,6 +358,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
     expectRow10AboveHorizontalScrollbar(tester);
+    expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));

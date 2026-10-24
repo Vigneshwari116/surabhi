@@ -1697,25 +1697,25 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                 )
               else
                 Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, expandedConstraints) {
-                      final frameHeight =
-                          expandedConstraints.maxHeight - 8;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            height: frameHeight,
-                            width: _gridTotalWidth,
-                            child: _buildDesktopGridZone(
-                              gridFontSize: gridFontSize,
-                              frameHeight: frameHeight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              width: _gridTotalWidth,
+                              child: _buildDesktopGridZone(
+                                gridFontSize: gridFontSize,
+                                expandVertically: true,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      );
-                    },
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ),
                 ),
             ],
@@ -2953,17 +2953,30 @@ class _SalesBillScreenState extends State<SalesBillScreen>
 
   Widget _buildDesktopGridZone({
     required double gridFontSize,
-    double? frameHeight,
+    bool expandVertically = false,
   }) {
     final showTax = _items.isNotEmpty;
+    final frame = _buildGridFrame(
+      showTax: showTax,
+      gridFontSize: gridFontSize,
+      expandVertically: expandVertically,
+    );
+    if (expandVertically) {
+      return frame;
+    }
     return Align(
       alignment: Alignment.topLeft,
-      child: _buildGridFrame(
-        showTax: showTax,
-        gridFontSize: gridFontSize,
-        frameHeight: frameHeight,
-      ),
+      child: frame,
     );
+  }
+
+  double _listBodyHeightForPane(double listPaneHeight) {
+    final fullRows = (listPaneHeight / _tableRowHeight).floor();
+    final partialHeight = listPaneHeight - fullRows * _tableRowHeight;
+    final visibleFullRows = partialHeight > 0 && fullRows > 0
+        ? fullRows - 1
+        : fullRows;
+    return math.max(_tableRowHeight, visibleFullRows * _tableRowHeight);
   }
 
   Widget _buildGridBodyRow({
@@ -2971,13 +2984,14 @@ class _SalesBillScreenState extends State<SalesBillScreen>
     required double gridFontSize,
     required double scrollWidth,
     required double listBodyHeight,
-    double? bodyScrollZoneHeight,
+    double? listPaneHeight,
   }) {
-    final resolvedBodyScrollZoneHeight = bodyScrollZoneHeight ??
-        listBodyHeight + _gridHScrollbarStripHeight;
-    final listPaneHeight =
-        resolvedBodyScrollZoneHeight - _gridHScrollbarStripHeight;
-    final extraListPaneHeight = listPaneHeight - listBodyHeight;
+    final resolvedListPaneHeight =
+        listPaneHeight ?? listBodyHeight;
+    final bodyScrollZoneHeight =
+        resolvedListPaneHeight + _gridHScrollbarStripHeight;
+    final listPaneFillerHeight =
+        resolvedListPaneHeight - listBodyHeight;
 
     final horizontalBody = SizedBox(
       width: scrollWidth,
@@ -2999,45 +3013,51 @@ class _SalesBillScreenState extends State<SalesBillScreen>
     );
 
     Widget listPaneFiller() {
-      if (extraListPaneHeight <= 0) {
+      if (listPaneFillerHeight <= 0) {
         return const SizedBox.shrink();
       }
       return SizedBox(
-        height: extraListPaneHeight,
+        height: listPaneFillerHeight,
         child: const ColoredBox(color: AppColors.background),
       );
     }
 
-    return SizedBox(
-      height: resolvedBodyScrollZoneHeight,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: _gridViewportWidth,
-            child: Column(
-              children: [
-                horizontalBodyScroller,
-                listPaneFiller(),
-                const SizedBox(height: _gridHScrollbarStripHeight),
-              ],
+    return ColoredBox(
+      color: AppColors.background,
+      child: SizedBox(
+        height: bodyScrollZoneHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: _gridViewportWidth,
+              child: Column(
+                children: [
+                  horizontalBodyScroller,
+                  listPaneFiller(),
+                  const SizedBox(height: _gridHScrollbarStripHeight),
+                ],
+              ),
             ),
-          ),
-          SizedBox(
-            width: _deleteColWidth,
-            height: resolvedBodyScrollZoneHeight,
-            child: Column(
-              children: [
-                SizedBox(
-                  height: listBodyHeight,
-                  child: _buildDeleteRowsList(),
+            SizedBox(
+              width: _deleteColWidth,
+              height: bodyScrollZoneHeight,
+              child: ColoredBox(
+                color: AppColors.cardWhite,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: listBodyHeight,
+                      child: _buildDeleteRowsList(),
+                    ),
+                    listPaneFiller(),
+                    const SizedBox(height: _gridHScrollbarStripHeight),
+                  ],
                 ),
-                listPaneFiller(),
-                const SizedBox(height: _gridHScrollbarStripHeight),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3045,7 +3065,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
   Widget _buildGridFrame({
     required bool showTax,
     required double gridFontSize,
-    double? frameHeight,
+    bool expandVertically = false,
   }) {
     final scrollWidth = _leftGridScrollWidth(showTax);
 
@@ -3054,18 +3074,63 @@ class _SalesBillScreenState extends State<SalesBillScreen>
       child: _buildTableHeader(showTax, gridFontSize, scrollWidth),
     );
 
-    final resolvedFrameHeight = frameHeight ?? _gridFrameHeight;
-    final bodyScrollZoneHeight = resolvedFrameHeight -
-        _tableHeaderHeight -
-        _gridFooterHeight;
-    final listBodyHeight = math.min(
-      bodyScrollZoneHeight - _gridHScrollbarStripHeight,
-      _gridBodyHeight,
+    final headerRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: _gridViewportWidth,
+          child: SingleChildScrollView(
+            controller: _gridHeaderHScrollController,
+            scrollDirection: Axis.horizontal,
+            child: horizontalHeader,
+          ),
+        ),
+        _tableDeleteHeaderCell(),
+      ],
     );
+
+    final footer = _buildFixedGridFooter(gridFontSize);
+
+    if (expandVertically) {
+      return SizedBox(
+        width: _gridTotalWidth,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.cardWhite,
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              headerRow,
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final listPaneHeight =
+                        constraints.maxHeight - _gridHScrollbarStripHeight;
+                    final listBodyHeight =
+                        _listBodyHeightForPane(listPaneHeight);
+                    return _buildGridBodyRow(
+                      showTax: showTax,
+                      gridFontSize: gridFontSize,
+                      scrollWidth: scrollWidth,
+                      listBodyHeight: listBodyHeight,
+                      listPaneHeight: listPaneHeight,
+                    );
+                  },
+                ),
+              ),
+              footer,
+            ],
+          ),
+        ),
+      );
+    }
 
     return SizedBox(
       width: _gridTotalWidth,
-      height: resolvedFrameHeight,
+      height: _gridFrameHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardWhite,
@@ -3075,28 +3140,14 @@ class _SalesBillScreenState extends State<SalesBillScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: _gridViewportWidth,
-                  child: SingleChildScrollView(
-                    controller: _gridHeaderHScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: horizontalHeader,
-                  ),
-                ),
-                _tableDeleteHeaderCell(),
-              ],
-            ),
+            headerRow,
             _buildGridBodyRow(
               showTax: showTax,
               gridFontSize: gridFontSize,
               scrollWidth: scrollWidth,
-              listBodyHeight: listBodyHeight,
-              bodyScrollZoneHeight: bodyScrollZoneHeight,
+              listBodyHeight: _gridBodyHeight,
             ),
-            _buildFixedGridFooter(gridFontSize),
+            footer,
           ],
         ),
       ),
