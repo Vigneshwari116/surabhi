@@ -3030,6 +3030,20 @@ class _SalesBillScreenState extends State<SalesBillScreen>
     );
   }
 
+  Widget _gridFrameChrome(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      foregroundDecoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildGridFrame({
     required bool showTax,
     required double gridFontSize,
@@ -3059,63 +3073,40 @@ class _SalesBillScreenState extends State<SalesBillScreen>
 
     final footer = _buildFixedGridFooter(gridFontSize);
 
-    if (expandVertically) {
-      return SizedBox(
-        width: _gridTotalWidth,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.cardWhite,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(6),
+    final frameColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        headerRow,
+        if (expandVertically)
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final listBodyHeight =
+                    constraints.maxHeight - _gridHScrollbarStripHeight;
+                return _buildGridBodyRow(
+                  showTax: showTax,
+                  gridFontSize: gridFontSize,
+                  scrollWidth: scrollWidth,
+                  listBodyHeight: listBodyHeight,
+                );
+              },
+            ),
+          )
+        else
+          _buildGridBodyRow(
+            showTax: showTax,
+            gridFontSize: gridFontSize,
+            scrollWidth: scrollWidth,
+            listBodyHeight: _gridBodyHeight,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              headerRow,
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final listBodyHeight =
-                        constraints.maxHeight - _gridHScrollbarStripHeight;
-                    return _buildGridBodyRow(
-                      showTax: showTax,
-                      gridFontSize: gridFontSize,
-                      scrollWidth: scrollWidth,
-                      listBodyHeight: listBodyHeight,
-                    );
-                  },
-                ),
-              ),
-              footer,
-            ],
-          ),
-        ),
-      );
-    }
+        footer,
+      ],
+    );
 
     return SizedBox(
       width: _gridTotalWidth,
-      height: _gridFrameHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.cardWhite,
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            headerRow,
-            _buildGridBodyRow(
-              showTax: showTax,
-              gridFontSize: gridFontSize,
-              scrollWidth: scrollWidth,
-              listBodyHeight: _gridBodyHeight,
-            ),
-            footer,
-          ],
-        ),
-      ),
+      height: expandVertically ? null : _gridFrameHeight,
+      child: _gridFrameChrome(frameColumn),
     );
   }
 
