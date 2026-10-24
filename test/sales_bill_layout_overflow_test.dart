@@ -119,6 +119,23 @@ void main() {
     );
   }
 
+  Finder _gridHorizontalScrollView() => find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal,
+      );
+
+  Finder _gridHorizontalScrollbar() => find.ancestor(
+        of: _gridHorizontalScrollView(),
+        matching: find.byType(Scrollbar),
+      );
+
+  void expectListViewportMeetsTotalRow(WidgetTester tester) {
+    final totalTop = tester.getRect(find.text('Total')).top;
+    final bodyBottom = tester.getRect(_gridHorizontalScrollbar()).bottom;
+    expect(bodyBottom, closeTo(totalTop, 1));
+  }
+
   void expectGrandRowNearDashboardContentBottom(WidgetTester tester) {
     final billScreen = find.byType(SalesBillScreen);
     expect(billScreen, findsOneWidget);
@@ -272,6 +289,7 @@ void main() {
 
     expect(find.text('BILL NO:'), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNWidgets(3));
+    expectListViewportMeetsTotalRow(tester);
     expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
@@ -315,6 +333,23 @@ void main() {
     for (var serial = 1; serial <= 10; serial++) {
       expect(find.text('$serial'), findsWidgets);
     }
+    expectListViewportMeetsTotalRow(tester);
+    expectGrandRowNearBodyBottom(tester);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill list viewport meets total row with one item at 1366x768',
+      (tester) async {
+    await pumpSalesBillDesktop(
+      tester,
+      items: [BillItem(particular: 'RICE', qty: 1, rate: 100)],
+    );
+
+    expectListViewportMeetsTotalRow(tester);
     expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
@@ -331,6 +366,20 @@ void main() {
       sidebarOpen: true,
     );
 
+    expectListViewportMeetsTotalRow(tester);
+    expectGrandRowNearBodyBottom(tester);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  testWidgets(
+      'sales bill list viewport meets total with 15 items at 1366x768',
+      (tester) async {
+    await pumpSalesBillDesktop(tester, items: billItems(15));
+
+    expectListViewportMeetsTotalRow(tester);
     expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
@@ -341,11 +390,13 @@ void main() {
   testWidgets(
       'sales bill grid scrolls with 15 items while total rows stay pinned at 1366x768',
       (tester) async {
-    await pumpSalesBillDesktop(tester, items: billItems(15));
+    // Sixteen lines exceed the ~15½ visible rows at 1366×768.
+    await pumpSalesBillDesktop(tester, items: billItems(16));
 
     expect(maxVerticalListScrollExtent(tester), greaterThan(0));
     expect(find.text('Total'), findsOneWidget);
     expect(find.text('GRAND TOTAL'), findsOneWidget);
+    expectListViewportMeetsTotalRow(tester);
     expectGrandRowNearBodyBottom(tester);
 
     final verticalList = find.byWidgetPredicate(
@@ -355,9 +406,10 @@ void main() {
     await tester.drag(verticalList.first, const Offset(0, -120));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    expect(find.text('15'), findsWidgets);
+    expect(find.text('16'), findsWidgets);
     expect(find.text('Total'), findsOneWidget);
     expect(find.text('GRAND TOTAL'), findsOneWidget);
+    expectListViewportMeetsTotalRow(tester);
     expectGrandRowNearBodyBottom(tester);
     expect(tester.takeException(), isNull);
 
