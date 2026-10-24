@@ -7,9 +7,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
 import 'package:surabhi/services/printer_settings_service.dart';
 import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
+import 'package:surabhi/utils/thermal_printer_filter.dart';
 
 class BillPrintService {
   /// Thermal PDF tuning (3-inch / RP3200 roll) — adjust here only.
@@ -26,6 +28,21 @@ class BillPrintService {
   static const double thermalHeaderLineSpacingMm = 6.0;
   static const double thermalGrandTotalLineSpacingMm = 5.25;
 
+  @visibleForTesting
+  static Future<List<Printer>> Function()? listPrintersOverride;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required Printer printer,
+    required Future<Uint8List> Function(PdfPageFormat format) onLayout,
+    required String name,
+    required PdfPageFormat format,
+  })? directPrintOverride;
+
+  @visibleForTesting
+  static int desktopPdfSaveCount = 0;
+
+  /// For tests / tooling only — not used by SAVE SALE print flow.
   static Future<String> saveReceiptToDesktop(SaleBill bill) async {
     final text = ReceiptService.buildReceiptText(bill);
     final saveDir = await _receiptSaveDirectory();
@@ -36,7 +53,9 @@ class BillPrintService {
     return file.path;
   }
 
+  /// For tests / tooling only — not used by SAVE SALE print flow.
   static Future<String> saveReceiptPdfToDesktop(SaleBill bill) async {
+    desktopPdfSaveCount++;
     final bytes = await _buildPdfBytes(bill, type: PrinterType.thermal);
     final saveDir = await _receiptSaveDirectory();
     final datePart = DateFormat('dd-MM-yyyy').format(bill.billDate);
@@ -46,13 +65,14 @@ class BillPrintService {
     return file.path;
   }
 
-  /// Resolves a physical printer: exact name, fuzzy match, then OS default.
+  /// Resolves a physical printer: saved name, fuzzy match, then OS default.
   @visibleForTesting
   static Printer? resolveTargetPrinter({
     required List<Printer> printers,
     String savedPrinterName = '',
   }) {
-    if (printers.isEmpty) {
+    final physical = ThermalPrinterFilter.physicalPrinters(printers);
+    if (physical.isEmpty) {
       return null;
     }
 
@@ -60,9 +80,9 @@ class BillPrintService {
         value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
     var available =
-        printers.where((printer) => printer.isAvailable != false).toList();
+        physical.where((printer) => printer.isAvailable != false).toList();
     if (available.isEmpty) {
-      available = printers;
+      available = physical;
     }
 
     final saved = savedPrinterName.trim();
@@ -97,7 +117,7 @@ class BillPrintService {
       }
     }
 
-    return available.first;
+    return null;
   }
 
   static Future<bool> printReceipt(
@@ -113,42 +133,47 @@ class BillPrintService {
       );
     }
 
-    final printers = await Printing.listPrinters();
+    final printers = listPrintersOverride != null
+        ? await listPrintersOverride!()
+        : await Printing.listPrinters();
     final printer = resolveTargetPrinter(
       printers: printers,
       savedPrinterName: printerName,
     );
 
     if (printer == null) {
-      throw Exception('No printers available on this system');
+      throw const BillPrintException(
+        'Printer not found. Choose the thermal printer in Printer settings',
+      );
     }
 
     final layout = _computePageLayout(
       ReceiptService.buildReceiptLines(bill),
       type: type,
     );
-    final bytes = await _buildPdfBytesFromLayout(layout);
 
-    try {
-      final printed = await Printing.directPrintPdf(
-        printer: printer,
-        onLayout: (_) async => bytes,
-        name: 'Bill_${bill.billNo}',
-        format: layout.pageFormat,
-        dynamicLayout: false,
-        usePrinterSettings: false,
+    final printed = directPrintOverride != null
+        ? await directPrintOverride!(
+            printer: printer,
+            onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+            name: 'Bill_${bill.billNo}',
+            format: layout.pageFormat,
+          )
+        : await Printing.directPrintPdf(
+            printer: printer,
+            onLayout: (_) async => _buildPdfBytesFromLayout(layout),
+            name: 'Bill_${bill.billNo}',
+            format: layout.pageFormat,
+            dynamicLayout: false,
+            usePrinterSettings: false,
+          );
+
+    if (!printed) {
+      throw const BillPrintException(
+        'Printer not found. Choose the thermal printer in Printer settings',
       );
-      if (printed) {
-        return true;
-      }
-    } catch (e, stack) {
-      debugPrint('Bill direct PDF print failed: $e\n$stack');
     }
 
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'Bill_${bill.billNo}',
-    );
     return true;
   }
 

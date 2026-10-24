@@ -42,6 +42,10 @@ class AppTextSizes {
   static const buttonText = 18.0;
   static const tableHeaderText = 18.0;
   static const tableRowText = 18.0;
+
+  /// Dense tables on report / ledger screens (full-width layout).
+  static const reportTableHeaderText = 13.0;
+  static const reportTableRowText = 13.0;
 }
 
 class AppTheme {

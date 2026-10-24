@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:surabhi/utils/thermal_printer_filter.dart';
 
 enum PrinterType {
   thermal,
@@ -51,7 +52,15 @@ class PrinterSettingsService {
   static Future<String?> getDefaultPrinter(PrinterType type) async {
     await migrateLegacyIfNeeded();
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_key(type));
+    final stored = prefs.getString(_key(type));
+    if (stored == null || stored.isEmpty) {
+      return null;
+    }
+    if (ThermalPrinterFilter.isVirtualPrinterName(stored)) {
+      await prefs.remove(_key(type));
+      return null;
+    }
+    return stored;
   }
 
   static Future<void> setDefaultPrinter(

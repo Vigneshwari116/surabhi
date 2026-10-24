@@ -14,7 +14,9 @@ import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/repositories/bill_repository.dart';
 import 'package:surabhi/services/app_session_service.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
 import 'package:surabhi/services/bill_print_service.dart';
+import 'package:surabhi/screen/staff_thermal_printer_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 
 import 'bill_item.dart';
@@ -1055,52 +1057,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       }
 
       final int savedBillNo = _billNo;
-
-      String? pdfPath;
-      try {
-        pdfPath = await BillPrintService.saveReceiptPdfToDesktop(bill);
-      } catch (e) {
-        pdfPath = null;
-      }
-
-      final defaultPrinter = await PrinterSettingsService.getDefaultPrinter(
-        PrinterType.thermal,
-      );
-
-      if (defaultPrinter == null || defaultPrinter.isEmpty) {
-        if (pdfPath != null) {
-          _showMessage(
-            'Bill $savedBillNo saved. PDF on Desktop: ${pdfPath.split(Platform.pathSeparator).last}',
-          );
-        } else {
-          _showMessage(
-            'No printer selected. Choose one in PRINTER, or check Desktop for PDF.',
-          );
-        }
-      } else {
-        try {
-          await BillPrintService.printReceipt(
-            bill,
-            printerName: defaultPrinter,
-            type: PrinterType.thermal,
-          );
-          if (pdfPath != null) {
-            _showMessage(
-              'Bill $savedBillNo saved, printed, and PDF saved to Desktop.',
-            );
-          } else {
-            _showMessage('Bill $savedBillNo saved and printed');
-          }
-        } catch (e) {
-          if (pdfPath != null) {
-            _showMessage(
-              'Bill $savedBillNo saved. PDF on Desktop (print failed: $e)',
-            );
-          } else {
-            _showMessage('Bill $savedBillNo saved (print failed: $e)');
-          }
-        }
-      }
+      await _printBillAfterSave(bill, savedBillNo);
 
       if (!mounted) return;
 
@@ -1276,6 +1233,62 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       return value.toInt().toString();
     }
     return value.toStringAsFixed(2);
+  }
+
+  // ============================================================
+  // PRINT (thermal only — no PDF save or preview)
+  // ============================================================
+
+  Future<void> _printBillAfterSave(SaleBill bill, int savedBillNo) async {
+    final savedPrinter =
+        await PrinterSettingsService.getDefaultPrinter(PrinterType.thermal) ??
+            '';
+
+    try {
+      await BillPrintService.printReceipt(
+        bill,
+        printerName: savedPrinter,
+        type: PrinterType.thermal,
+      );
+      if (!mounted) return;
+      _showMessage('Bill $savedBillNo saved and printed');
+    } on BillPrintException {
+      if (!mounted) return;
+      await _showPrinterNotConfiguredDialog();
+      _showMessage('Bill $savedBillNo saved (not printed)');
+    } catch (_) {
+      if (!mounted) return;
+      await _showPrinterNotConfiguredDialog();
+      _showMessage('Bill $savedBillNo saved (not printed)');
+    }
+  }
+
+  Future<void> _showPrinterNotConfiguredDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: const Text(
+          'Printer not found. Choose the thermal printer in Printer settings',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const StaffThermalPrinterScreen(),
+                ),
+              );
+            },
+            child: const Text('Printer settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
@@ -1469,6 +1482,28 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
           required bool expandGrid,
           double? gridHeight,
         }) {
+          final gridZone = expandGrid
+              ? Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: _gridTotalWidth,
+                        child: _buildDesktopGridZone(
+                          gridFontSize: gridFontSize,
+                          expandBody: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : SizedBox(
+                  height: gridHeight ?? _gridFrameHeight,
+                  child: _buildDesktopGridZone(
+                    gridFontSize: gridFontSize,
+                  ),
+                );
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1480,12 +1515,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
                 menuContext: context,
               ),
               const SizedBox(height: _topAreaGap),
-              SizedBox(
-                height: _gridFrameHeight,
-                child: _buildDesktopGridZone(
-                  gridFontSize: gridFontSize,
-                ),
-              ),
+              gridZone,
               const SizedBox(height: _topAreaGap),
               _buildSaveSaleBar(),
             ],
@@ -2749,17 +2779,23 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
   Widget _buildDesktopGridZone({
     required double gridFontSize,
+    bool expandBody = false,
   }) {
     final showTax = _items.isNotEmpty;
     return Align(
       alignment: Alignment.topLeft,
-      child: _buildGridFrame(showTax: showTax, gridFontSize: gridFontSize),
+      child: _buildGridFrame(
+        showTax: showTax,
+        gridFontSize: gridFontSize,
+        expandBody: expandBody,
+      ),
     );
   }
 
   Widget _buildGridFrame({
     required bool showTax,
     required double gridFontSize,
+    bool expandBody = false,
   }) {
     final scrollWidth = _leftGridScrollWidth(showTax);
 
@@ -2770,64 +2806,67 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
 
     Widget horizontalBody = SizedBox(
       width: scrollWidth,
-      height: _gridBodyHeight,
+      height: expandBody ? null : _gridBodyHeight,
       child: _buildItemRowsList(showTax, gridFontSize, scrollWidth),
+    );
+
+    final gridBody = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: _gridViewportWidth,
+          child: Scrollbar(
+            controller: _gridHScrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _gridHScrollController,
+              scrollDirection: Axis.horizontal,
+              child: horizontalBody,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: _deleteColWidth,
+          child: ColoredBox(
+            color: AppColors.background,
+            child: _buildDeleteRowsList(),
+          ),
+        ),
+      ],
+    );
+
+    final frameColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: _gridViewportWidth,
+              child: SingleChildScrollView(
+                controller: _gridHeaderHScrollController,
+                scrollDirection: Axis.horizontal,
+                child: horizontalHeader,
+              ),
+            ),
+            _tableDeleteHeaderCell(),
+          ],
+        ),
+        if (expandBody) Expanded(child: gridBody) else SizedBox(height: _gridBodyHeight, child: gridBody),
+        _buildFixedGridFooter(gridFontSize),
+      ],
     );
 
     return SizedBox(
       width: _gridTotalWidth,
-      height: _gridFrameHeight,
+      height: expandBody ? null : _gridFrameHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardWhite,
           border: Border.all(color: AppColors.border),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: _gridViewportWidth,
-                  child: SingleChildScrollView(
-                    controller: _gridHeaderHScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: horizontalHeader,
-                  ),
-                ),
-                _tableDeleteHeaderCell(),
-              ],
-            ),
-            SizedBox(
-              height: _gridBodyHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _gridViewportWidth,
-                    child: Scrollbar(
-                      controller: _gridHScrollController,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _gridHScrollController,
-                        scrollDirection: Axis.horizontal,
-                        child: horizontalBody,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: _deleteColWidth,
-                    height: _gridBodyHeight,
-                    child: _buildDeleteRowsList(),
-                  ),
-                ],
-              ),
-            ),
-            _buildFixedGridFooter(gridFontSize),
-          ],
-        ),
+        child: frameColumn,
       ),
     );
   }
@@ -2962,6 +3001,7 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       width: _deleteColWidth,
       height: _tableHeaderHeight,
       decoration: BoxDecoration(
+        color: AppColors.tableHeader,
         border: Border(
           left: BorderSide(color: AppColors.border, width: 0.6),
         ),
@@ -3137,7 +3177,9 @@ class _SalesBillScreenState extends State<SalesBillScreen> {
       child: Container(
         height: _tableRowHeight,
         decoration: BoxDecoration(
+          color: AppColors.background,
           border: Border(
+            left: BorderSide(color: AppColors.border, width: 0.6),
             bottom: BorderSide(color: AppColors.border, width: 0.6),
           ),
         ),

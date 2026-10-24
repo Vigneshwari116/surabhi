@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:surabhi/models/sale_bill.dart';
 import 'package:surabhi/screen/bill_item.dart';
+import 'package:surabhi/services/bill_print_exception.dart';
 import 'package:surabhi/services/bill_print_service.dart';
 import 'package:surabhi/services/receipt_layout.dart';
 import 'package:surabhi/services/receipt_service.dart';
@@ -165,6 +166,35 @@ void main() {
       );
     });
 
+    test('never selects a virtual printer', () {
+      final printers = [
+        _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        _printer(name: 'RP3200', isDefault: true),
+      ];
+
+      final resolved = BillPrintService.resolveTargetPrinter(
+        printers: printers,
+        savedPrinterName: 'Microsoft Print to PDF',
+      );
+
+      expect(resolved?.name, 'RP3200');
+    });
+
+    test('returns null when only virtual printers exist', () {
+      final printers = [
+        _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        _printer(name: 'OneNote for Windows 10'),
+      ];
+
+      expect(
+        BillPrintService.resolveTargetPrinter(
+          printers: printers,
+          savedPrinterName: '',
+        ),
+        isNull,
+      );
+    });
+
     test('uses default when saved name is empty', () {
       final printers = [
         _printer(name: 'Counter', isDefault: true),
@@ -178,5 +208,61 @@ void main() {
 
       expect(resolved?.name, 'Counter');
     });
+  });
+
+  test('receipt lines include SURABHI EXPORT shop name', () {
+    final lines = ReceiptService.buildReceiptLines(_sampleBill());
+    expect(lines.join('\n'), contains('SURABHI EXPORT'));
+  });
+
+  test('printReceipt sends to printer without saving a PDF file', () async {
+    BillPrintService.desktopPdfSaveCount = 0;
+    var directPrintCalls = 0;
+
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Thermal POS', isDefault: true),
+        ];
+    BillPrintService.directPrintOverride = ({
+      required printer,
+      required onLayout,
+      required name,
+      required format,
+    }) async {
+      directPrintCalls++;
+      final bytes = await onLayout(format);
+      expect(bytes, isNotEmpty);
+      return true;
+    };
+
+    try {
+      final ok = await BillPrintService.printReceipt(
+        _sampleBill(),
+        printerName: 'Thermal POS',
+      );
+      expect(ok, isTrue);
+      expect(directPrintCalls, 1);
+      expect(BillPrintService.desktopPdfSaveCount, 0);
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+      BillPrintService.directPrintOverride = null;
+    }
+  });
+
+  test('printReceipt throws when no physical printer is available', () async {
+    BillPrintService.listPrintersOverride = () async => [
+          _printer(name: 'Microsoft Print to PDF', isDefault: true),
+        ];
+
+    try {
+      await expectLater(
+        BillPrintService.printReceipt(
+          _sampleBill(),
+          printerName: '',
+        ),
+        throwsA(isA<BillPrintException>()),
+      );
+    } finally {
+      BillPrintService.listPrintersOverride = null;
+    }
   });
 }

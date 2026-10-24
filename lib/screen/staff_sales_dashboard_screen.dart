@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:surabhi/repositories/abstract_repository.dart';
 import 'package:surabhi/theme/app_theme.dart';
 import 'package:surabhi/widgets/compact_layout.dart';
+import 'package:surabhi/widgets/report_table_viewport.dart';
 
 /// Staff view: today's sales totals for the logged-in location (LocalDb).
 class StaffSalesDashboardScreen extends StatefulWidget {
@@ -78,8 +79,7 @@ class _StaffSalesDashboardScreenState extends State<StaffSalesDashboardScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : CenteredContent(
-              maxWidth: 520,
+          : ReportFullWidthBody(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
