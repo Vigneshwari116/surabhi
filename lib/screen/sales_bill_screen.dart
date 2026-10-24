@@ -1697,14 +1697,25 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                 )
               else
                 Expanded(
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: SizedBox(
-                      height: _gridFrameHeight,
-                      child: _buildDesktopGridZone(
-                        gridFontSize: gridFontSize,
-                      ),
-                    ),
+                  child: LayoutBuilder(
+                    builder: (context, expandedConstraints) {
+                      final frameHeight =
+                          expandedConstraints.maxHeight - 8;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: frameHeight,
+                            width: _gridTotalWidth,
+                            child: _buildDesktopGridZone(
+                              gridFontSize: gridFontSize,
+                              frameHeight: frameHeight,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      );
+                    },
                   ),
                 ),
             ],
@@ -2942,33 +2953,40 @@ class _SalesBillScreenState extends State<SalesBillScreen>
 
   Widget _buildDesktopGridZone({
     required double gridFontSize,
+    double? frameHeight,
   }) {
     final showTax = _items.isNotEmpty;
     return Align(
       alignment: Alignment.topLeft,
-      child: _buildGridFrame(showTax: showTax, gridFontSize: gridFontSize),
+      child: _buildGridFrame(
+        showTax: showTax,
+        gridFontSize: gridFontSize,
+        frameHeight: frameHeight,
+      ),
     );
   }
 
-  Widget _buildGridFrame({
+  Widget _buildGridBodyRow({
     required bool showTax,
     required double gridFontSize,
+    required double scrollWidth,
+    required double listBodyHeight,
+    double? bodyScrollZoneHeight,
   }) {
-    final scrollWidth = _leftGridScrollWidth(showTax);
+    final resolvedBodyScrollZoneHeight = bodyScrollZoneHeight ??
+        listBodyHeight + _gridHScrollbarStripHeight;
+    final listPaneHeight =
+        resolvedBodyScrollZoneHeight - _gridHScrollbarStripHeight;
+    final extraListPaneHeight = listPaneHeight - listBodyHeight;
 
-    Widget horizontalHeader = SizedBox(
+    final horizontalBody = SizedBox(
       width: scrollWidth,
-      child: _buildTableHeader(showTax, gridFontSize, scrollWidth),
-    );
-
-    Widget horizontalBody = SizedBox(
-      width: scrollWidth,
-      height: _gridBodyHeight,
+      height: listBodyHeight,
       child: _buildItemRowsList(showTax, gridFontSize, scrollWidth),
     );
 
-    Widget horizontalBodyScroller = SizedBox(
-      height: _gridBodyScrollZoneHeight,
+    final horizontalBodyScroller = SizedBox(
+      height: listBodyHeight,
       child: Scrollbar(
         controller: _gridHScrollController,
         thumbVisibility: true,
@@ -2980,9 +2998,74 @@ class _SalesBillScreenState extends State<SalesBillScreen>
       ),
     );
 
+    Widget listPaneFiller() {
+      if (extraListPaneHeight <= 0) {
+        return const SizedBox.shrink();
+      }
+      return SizedBox(
+        height: extraListPaneHeight,
+        child: const ColoredBox(color: AppColors.background),
+      );
+    }
+
+    return SizedBox(
+      height: resolvedBodyScrollZoneHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: _gridViewportWidth,
+            child: Column(
+              children: [
+                horizontalBodyScroller,
+                listPaneFiller(),
+                const SizedBox(height: _gridHScrollbarStripHeight),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: _deleteColWidth,
+            height: resolvedBodyScrollZoneHeight,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: listBodyHeight,
+                  child: _buildDeleteRowsList(),
+                ),
+                listPaneFiller(),
+                const SizedBox(height: _gridHScrollbarStripHeight),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGridFrame({
+    required bool showTax,
+    required double gridFontSize,
+    double? frameHeight,
+  }) {
+    final scrollWidth = _leftGridScrollWidth(showTax);
+
+    final horizontalHeader = SizedBox(
+      width: scrollWidth,
+      child: _buildTableHeader(showTax, gridFontSize, scrollWidth),
+    );
+
+    final resolvedFrameHeight = frameHeight ?? _gridFrameHeight;
+    final bodyScrollZoneHeight = resolvedFrameHeight -
+        _tableHeaderHeight -
+        _gridFooterHeight;
+    final listBodyHeight = math.min(
+      bodyScrollZoneHeight - _gridHScrollbarStripHeight,
+      _gridBodyHeight,
+    );
+
     return SizedBox(
       width: _gridTotalWidth,
-      height: _gridFrameHeight,
+      height: resolvedFrameHeight,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.cardWhite,
@@ -3006,30 +3089,12 @@ class _SalesBillScreenState extends State<SalesBillScreen>
                 _tableDeleteHeaderCell(),
               ],
             ),
-            SizedBox(
-              height: _gridBodyScrollZoneHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _gridViewportWidth,
-                    child: horizontalBodyScroller,
-                  ),
-                  SizedBox(
-                    width: _deleteColWidth,
-                    height: _gridBodyScrollZoneHeight,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: _gridBodyHeight,
-                          child: _buildDeleteRowsList(),
-                        ),
-                        const SizedBox(height: _gridHScrollbarStripHeight),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            _buildGridBodyRow(
+              showTax: showTax,
+              gridFontSize: gridFontSize,
+              scrollWidth: scrollWidth,
+              listBodyHeight: listBodyHeight,
+              bodyScrollZoneHeight: bodyScrollZoneHeight,
             ),
             _buildFixedGridFooter(gridFontSize),
           ],
