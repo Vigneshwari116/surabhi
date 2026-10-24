@@ -13,6 +13,7 @@ import 'package:surabhi/config/app_config.dart';
 import 'package:surabhi/db/local_db.dart';
 import 'package:surabhi/screen/bill_item.dart';
 import 'package:surabhi/screen/sales_bill_screen.dart';
+import 'package:surabhi/screen/staff_dashboard_screen.dart';
 import 'package:surabhi/services/session_service.dart';
 import 'package:surabhi/utils/money_format.dart';
 
@@ -118,6 +119,54 @@ void main() {
     );
   }
 
+  void expectGrandRowNearDashboardContentBottom(WidgetTester tester) {
+    final billScreen = find.byType(SalesBillScreen);
+    expect(billScreen, findsOneWidget);
+    final contentBottom = tester.getRect(billScreen).bottom;
+    expect(
+      contentBottom - grandRowBottom(tester),
+      lessThanOrEqualTo(_maxGrandRowInsetFromBodyBottom),
+    );
+  }
+
+  Future<void> pumpStaffDashboardBill(
+    WidgetTester tester, {
+    List<BillItem>? items,
+  }) async {
+    if (items != null) {
+      await SessionService.saveBillSession(
+        location: AppConfig.displayLocationName,
+        billNo: 1,
+        billDate: DateTime(2026, 10, 13),
+        paymentMode: 'UPI',
+        customerName: 'TEST CUSTOMER',
+        mobile: '9876543210',
+        items: items,
+        billSaved: false,
+      );
+    }
+
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: StaffDashboardScreen(),
+      ),
+    );
+
+    for (var i = 0; i < 80; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find.text('BILL NO:').evaluate().isNotEmpty &&
+          find.text('GRAND TOTAL').evaluate().isNotEmpty) {
+        break;
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
   void expectRow10AboveHorizontalScrollbar(WidgetTester tester) {
     final row10 = find.text('ITEM 10');
     expect(row10, findsOneWidget);
@@ -196,6 +245,20 @@ void main() {
       expect(find.byIcon(Icons.menu_open), findsWidgets);
     }
   }
+
+  testWidgets(
+      'staff dashboard bill pins grand row near content bottom at 1366x768',
+      (tester) async {
+    await pumpStaffDashboardBill(tester, items: billItems(3));
+
+    expect(find.byKey(const Key('staff_dashboard_shell')), findsOneWidget);
+    expect(find.text('BILL NO:'), findsOneWidget);
+    expectGrandRowNearDashboardContentBottom(tester);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 11));
+  });
 
   testWidgets('sales bill desktop layout has no overflow at 1366x768 with 3 items',
       (tester) async {

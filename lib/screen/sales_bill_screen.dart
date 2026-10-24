@@ -1673,8 +1673,7 @@ class _SalesBillScreenState extends State<SalesBillScreen>
             _gridMinScrollHeight +
             _entryValidationSlack;
         final fitsFixedLayout = constraints.maxHeight >= minColumnHeight;
-        final usePageScroll =
-            !fitsFixedLayout || widget.embeddedInDashboard;
+        final usePageScroll = !fitsFixedLayout;
 
         Widget columnChild() {
           return Column(
