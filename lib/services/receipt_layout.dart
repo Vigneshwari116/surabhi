@@ -26,6 +26,7 @@ class ReceiptLayout {
 
   static const double shopNameTargetFontSizePt = 14.0;
   static const double grandTotalAmountTargetFontSizePt = 13.0;
+  static const double grandTotalLabelAmountGapMm = 1.0;
 
   /// Courier Bold character width ≈ 0.6 × font size (pt).
   static const double courierBoldCharWidthFactor = 0.6;
@@ -83,8 +84,9 @@ class ReceiptLayout {
     const labelText = 'GRAND TOTAL';
 
     while (labelPt >= 6 && amountPt >= 6) {
-      final totalWidth =
-          textWidthMm(labelText, labelPt) + textWidthMm(amountText, amountPt);
+      final totalWidth = textWidthMm(labelText, labelPt) +
+          grandTotalLabelAmountGapMm +
+          textWidthMm(amountText, amountPt);
       if (totalWidth <= contentWidthMm) {
         break;
       }

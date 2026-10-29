@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:surabhi/config/location_codes.dart';
 import 'package:surabhi/models/sale_bill.dart';
@@ -229,19 +230,53 @@ class ReceiptService {
   }
 
   static String _totalLine(double qty, double taxableTotal) {
-    final leftWidth =
-        _snoW + ReceiptLayout.columnGap + _groupW + ReceiptLayout.columnGap + _rateW;
+    final amountText = _formatReceiptMoney(taxableTotal);
+    final amountW = _footerAmountWidth(amountText);
+    final fixedRight = _gap.length + _qtyW + _gap.length + amountW;
+    final leftWidth = _contentWidth - fixedRight;
     final left = _padRight('TOTAL PCS', leftWidth);
     return '$left'
         '$_gap'
         '${_padLeft(_wholeNumber(qty), _qtyW)}'
         '$_gap'
-        '${_padLeft(_wholeNumber(taxableTotal), _amountW)}';
+        '${_footerAmountField(amountText, amountW)}';
   }
 
   static String _rightAmountLine(String label, double amount) {
-    final labelPart = _padRight(label, _labelW);
-    return '$labelPart${_padLeft(_wholeNumber(amount), _amountW)}';
+    final amountText = _formatReceiptMoney(amount);
+    final amountW = _footerAmountWidth(amountText);
+    final labelW = _contentWidth - amountW;
+    final labelPart = _padRight(label, labelW);
+    return '$labelPart${_footerAmountField(amountText, amountW)}';
+  }
+
+  /// Money columns on footer rows — two decimals, no thousands separator (thermal font).
+  static String _formatReceiptMoney(double value) =>
+      NumberFormat('0.00').format(value);
+
+  static int _footerAmountWidth(String amountText) {
+    return amountText.length > _amountW ? amountText.length : _amountW;
+  }
+
+  static String _footerAmountField(String amountText, int amountW) {
+    if (amountText.length > _amountW) {
+      return amountText;
+    }
+    return _padLeft(amountText, amountW);
+  }
+
+  /// Amount text after a footer label on a receipt line (for PDF emphasis rows).
+  @visibleForTesting
+  static String? footerAmountAfterLabel(String line, String label) {
+    final trimmed = line.trimLeft();
+    if (!trimmed.startsWith(label)) {
+      return null;
+    }
+    final rest = trimmed.substring(label.length).trimLeft();
+    if (rest.isEmpty) {
+      return null;
+    }
+    return rest.trim();
   }
 
   static String _fieldLine(String label, String value) {
